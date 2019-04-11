@@ -55,7 +55,7 @@ def binary_search(f, lo, hi):
     return hi
 
 
-class Sampler(object):
+class DataSampler(object):
     """Fairly samples a slice from a set of variable sized chunks.
 
     'Fairly' means that the distribution is the same as sampling from one concatenated chunk,

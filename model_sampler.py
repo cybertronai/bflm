@@ -1,6 +1,9 @@
+"""Collection of functions based on huggingface examples/run_gpt2.py to sample from a GPT-2 model."""
+
 import torch
 import torch.nn.functional as F
 import numpy as np
+from tqdm import trange
 
 def top_k_logits(logits, k):
     """
@@ -39,22 +42,20 @@ def sample_sequence(model, length, start_token=None, batch_size=None, context=No
             output = torch.cat((output, prev), dim=1)
     return output
 
-def print_samples(model, context_tokens, enc, args):
+def print_samples(model, enc, args, context_tokens=[], unconditional=True, **kwargs):
+    print('generating samples')
     model.eval()
-
     generated = 0
-    print(args)
-    for _ in range(args['nsamples'] // args['batch_size']):
-        context_tokens = context_tokens = enc.encode('This is a test.')
+    for _ in range(kwargs['nsamples'] // kwargs['batch_size']):
         out = sample_sequence(
-            model=model, length=args['length'],
-            context=context_tokens if not args['unconditional'] else None,
-            start_token=enc.encoder['<|endoftext|>'] if args['unconditional'] else None,
-            batch_size=args['batch_size'],
-            temperature=args['temperature'], top_k=args['top_k'], device=device
+            model=model, length=kwargs['length'],
+            context=context_tokens if not unconditional else None,
+            start_token=enc.encoder['<|endoftext|>'] if unconditional else None,
+            batch_size=kwargs['batch_size'],
+            temperature=kwargs['temperature'], top_k=kwargs['top_k'], device=args.device
         )
         out = out[:, len(context_tokens):].tolist()
-        for i in range(args['batch_size']):
+        for i in range(kwargs['batch_size']):
             generated += 1
             text = enc.decode(out[i])
             print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40)
