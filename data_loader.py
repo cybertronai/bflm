@@ -1,3 +1,5 @@
+""" Stolen from https://github.com/nshepperd/gpt-2/blob/finetuning/src/load_dataset.py"""
+
 import glob
 import numpy as np
 import os

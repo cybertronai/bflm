@@ -18,8 +18,9 @@ from sampler import print_samples
 
 
 def checkpoint(model, args):
-    model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
     output_model_file = os.path.join(args['output_dir'], "pytorch_model.bin")
+    print('saving checkpoint to', output_model_file)
+    model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
     torch.save(model_to_save.state_dict(), output_model_file)
 
 class SampledDataset(Dataset):
@@ -74,23 +75,20 @@ def main():
 
 
     # TODO: add args here
-    # print_samples()
+    # print_samples(args)
 
     # ## Prep dataset
-    # `load_dataset` stolen from https://github.com/nshepperd/gpt-2/blob/finetuning/src/load_dataset.py
-
-
-    #train_data = load_dataset(enc, '/ncluster/data/wikiextracted/AA/*')
-    #train_data = load_dataset(enc, '/home/ubuntu/data/wikiAA.npz')
-    train_data = load_dataset(enc, '/Users/ben/data/wikitext-2/wiki.train.tokens')
+    cache_path = f'{args["output_dir"]}/{os.path.basename(args["train_dataset"])}.npz'
+    if not os.path.exists(cache_path):
+        train_data = load_dataset(enc, args['train_dataset'])
+        # Cache encoded data.
+        print(f'caching data to {cache_path}')
+        np.savez_compressed(cache_path, *train_data)
+    else:
+        train_data = load_dataset(enc, cache_path)
     assert len(train_data) > 0
-
-    # Cache encoded data.
-    print('saving data')
-    SAVE_PATH = '/Users/ben/data/wikitext-2/wiki.train.npz'
-    np.savez_compressed(SAVE_PATH, *train_data)
-    print(len(train_data))
-
+    
+    print(f'loaded {len(train_data)} lines')
 
     sampler = Sampler(train_data)
     s = sampler.sample(1024)
