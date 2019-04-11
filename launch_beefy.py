@@ -1,0 +1,75 @@
+#!/usr/bin/env python
+#
+# c5.18 with fast disk, $4/hour
+
+import argparse
+import os
+import ncluster
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--name', type=str, default='beefy',
+                    help="instance name")
+parser.add_argument('--image-name', type=str,
+                    default='Deep Learning AMI (Ubuntu) Version 22.0',
+                    help="name of AMI to use ")
+parser.add_argument('--instance-type', type=str, default='c5.18xlarge',
+                    help="type of instance")
+parser.add_argument('--password',
+                    default='DefaultNotebookPasswordPleaseChange',
+                    help='password to use for jupyter notebook')
+parser.add_argument("--aws", action="store_true", help="enable to run on AWS")
+
+args = parser.parse_args()
+module_path = os.path.dirname(os.path.abspath(__file__))
+
+ncluster.set_backend('aws')
+
+def main():
+
+  os.environ['NCLUSTER_AWS_FAST_ROOTDISK'] = '1'
+  
+  task = ncluster.make_task(name=args.name,
+                            instance_type=args.instance_type,
+                            image_name=args.image_name)
+
+  # upload notebook config with provided password
+  jupyter_config_fn = _create_jupyter_config(args.password)
+  remote_config_fn = '~/.jupyter/jupyter_notebook_config.py'
+  task.upload(jupyter_config_fn, remote_config_fn)
+
+  # upload sample notebook and start Jupyter server
+  task.run('mkdir -p /ncluster/notebooks')
+  task.upload(f'{module_path}/gpubox_sample.ipynb',
+              '/ncluster/notebooks/gpubox_sample.ipynb',
+              dont_overwrite=True)
+  task.run('sudo apt-get install mosh || echo failed')
+  task.run('cd /ncluster/notebooks')
+  task.run('jupyter notebook', non_blocking=True)
+  print(f'Jupyter notebook will be at http://{task.public_ip}:8888')
+
+
+def _create_jupyter_config(password):
+  from notebook.auth import passwd
+  sha = passwd(args.password)
+  local_config_fn = f'{module_path}/gpubox_jupyter_notebook_config.py'
+  temp_config_fn = '/tmp/' + os.path.basename(local_config_fn)
+  os.system(f'cp {local_config_fn} {temp_config_fn}')
+  _replace_lines(temp_config_fn, 'c.NotebookApp.password',
+                 f"c.NotebookApp.password = '{sha}'")
+  return temp_config_fn
+
+
+def _replace_lines(fn, startswith, new_line):
+  """Replace lines starting with starts_with in fn with new_line."""
+  new_lines = []
+  for line in open(fn):
+    if line.startswith(startswith):
+      new_lines.append(new_line)
+    else:
+      new_lines.append(line)
+  with open(fn, 'w') as f:
+    f.write('\n'.join(new_lines))
+
+
+if __name__ == '__main__':
+  main()
