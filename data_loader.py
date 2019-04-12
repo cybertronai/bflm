@@ -1,11 +1,16 @@
 """ Stolen from https://github.com/nshepperd/gpt-2/blob/finetuning/src/load_dataset.py"""
 
+import argparse
 import glob
-import numpy as np
 import os
 import random
+
+import numpy as np
 import tqdm
 from torch.utils.data import DataLoader, Dataset, Subset
+
+from pytorch_pretrained_bert import GPT2Tokenizer
+
 
 def load_dataset(enc, path, combine=50000):
     paths = []
@@ -64,6 +69,7 @@ def get_data_loader(dataset_path, enc, batch_size, args, verbose=True):
 def lazy_load(dataset_path, enc, args):
     cache_path = f'{args.output_dir}/{os.path.basename(dataset_path)}.{abs(hash(dataset_path)) % (10 ** 8)}.npz'
     if not os.path.exists(cache_path):
+        print('loading data from', dataset_path)
         # Set combine to a huge number so everything is 1 vector
         data = load_dataset(enc, dataset_path, combine=1e99)
         # Cache encoded data.
@@ -74,4 +80,17 @@ def lazy_load(dataset_path, enc, args):
     assert len(data) > 0
     return data
 
+def main():
+    """Preprocess a dataset."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output_dir", default=None, type=str, required=True,
+                    help="The output directory where the model predictions and checkpoints will be written.")
+    parser.add_argument('--dataset_path', type=str, default='')
+    parser.add_argument('--model_name_or_path', type=str, default='gpt2',
+                        help='pretrained model name')
+    args = parser.parse_args()
+    enc = GPT2Tokenizer.from_pretrained(args.model_name_or_path)
+    _ = lazy_load(args.dataset_path, enc, args)
     
+if __name__ == '__main__':
+    main()
