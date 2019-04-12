@@ -7,6 +7,7 @@ import os
 
 import numpy as np
 import torch
+import time
 import torch.nn.functional as F
 import tqdm
 from torch.utils.data import DataLoader, Dataset
@@ -16,6 +17,13 @@ import pytorch_pretrained_bert
 from data_loader import DataSampler, load_dataset
 from model_sampler import print_samples
 from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer, OpenAIAdam
+
+from tensorboardX import SummaryWriter
+
+def log_tb(tag, val):
+  """Log value to tensorboard (relies on global_example_count rather than step count to give comparable graphs across batch sizes)"""
+  global global_example_count, event_writer
+  event_writer.add_scalar(tag, val, global_example_count)
 
 
 def checkpoint(model, args):
@@ -38,6 +46,7 @@ class SampledDataset(Dataset):
     
 
 def main():
+    global global_example_count, event_writer
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=42)
@@ -61,7 +70,11 @@ def main():
     parser.add_argument('--n_valid', type=int, default=374)
     parser.add_argument('--server_ip', type=str, default='', help="Can be used for distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
+    parser.add_argument('--distributed', action='store_true', help='Run distributed training')
+    parser.add_argument('--logdir',type=str, default='/tmp/runs', help="location of logging directory")
+    
     args = parser.parse_args()
+    os.system('mkdir -p ' + args.logdir)
 
     torch.random.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
@@ -71,6 +84,17 @@ def main():
     enc = GPT2Tokenizer.from_pretrained(args.model_name_or_path)
     model = GPT2LMHeadModel.from_pretrained(args.model_name_or_path)
     model.to(device)
+
+    # setup TensorBoard logging
+    global_example_count = 0
+    print(f"Logging to {args.logdir}")
+    event_writer = SummaryWriter(args.logdir)
+    log_tb("first", time.time())
+
+    
+
+    # TODO: add args here
+    # print_samples(args)
 
     # ## Prep dataset
     cache_path = f'{args.output_dir}/{os.path.basename(args.train_dataset)}.npz'
@@ -142,6 +166,10 @@ def main():
                 exp_average_loss = loss.item() if exp_average_loss is None else 0.7*exp_average_loss+0.3*loss.item()
                 nb_tr_steps += 1
                 tqdm_bar.desc = "Training loss: {:.2e} lr: {:.2e}".format(exp_average_loss, optimizer.get_lr()[0])
+                log_tb('loss', loss.item())
+                log_tb('lr', optimizer.get_lr()[0])
+                global_example_count+=args.train_batch_size
+
 
     except KeyboardInterrupt:
         tqdm_bar.close()
