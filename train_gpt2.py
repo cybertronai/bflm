@@ -2,20 +2,16 @@
 # coding: utf-8
 
 import argparse
-import logging
 import math
 import os
 import time
 
-import numpy as np
 import torch
-import torch.nn.functional as F
 import tqdm
 from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader, Dataset
 from tqdm import trange
 
-import pytorch_pretrained_bert
 from data_loader import get_data_loader
 from model_sampler import print_samples
 from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer, OpenAIAdam
@@ -48,7 +44,7 @@ def main():
                         help="The output directory where the model predictions and checkpoints will be written.")
     parser.add_argument('--train_dataset', type=str, default='')
     parser.add_argument('--eval_dataset', type=str, default='')
-    parser.add_argument('--context_length', type=int, default=128)
+    parser.add_argument('--context_length', type=int, default=1024)
     parser.add_argument('--num_train_epochs', type=int, default=3)
     parser.add_argument('--train_batch_size', type=int, default=16)
     parser.add_argument('--eval_batch_size', type=int, default=16)
@@ -62,8 +58,9 @@ def main():
     parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
     parser.add_argument('--distributed', action='store_true', help='Run distributed training')
     parser.add_argument('--logdir',type=str, default='/tmp/runs', help="location of logging directory")
-    
+
     args = parser.parse_args()
+    assert args.do_train or args.do_eval, "Specify at least one of do_train or do_eval"
     os.system('mkdir -p ' + args.logdir)
 
     torch.random.manual_seed(args.seed)
@@ -116,11 +113,8 @@ def main():
                 nb_tr_steps = 0
                 tqdm_bar = tqdm.tqdm(data_loader, desc="Training")
                 for step, batch in enumerate(tqdm_bar):
-                    # Put model in training mode.
                     model.train()
                     batch = batch.to(device)
-                    # input_ids, position_ids=None, token_type_ids=None, lm_labels=None, past=None
-                    # if lm_labels, outputs loss
                     loss = model(batch, lm_labels=batch)
                     loss.backward()
                     optimizer.step()
@@ -128,7 +122,7 @@ def main():
                     tr_loss += loss.item()
                     exp_average_loss = loss.item() if exp_average_loss is None else 0.7*exp_average_loss+0.3*loss.item()
                     nb_tr_steps += 1
-                    tqdm_bar.desc = "Training loss: {:.2e} lr: {:.2e}".format(exp_average_loss, optimizer.get_lr()[0])
+                    tqdm_bar.desc = f"Training loss: {exp_average_loss:.2e} lr: {optimizer.get_lr()[0]:.2e} ppl: {math.exp(exp_average_loss):.2e}"
                     log_tb('loss', loss.item())
                     log_tb('lr', optimizer.get_lr()[0])
                     global_example_count+=args.train_batch_size
@@ -137,8 +131,13 @@ def main():
         except KeyboardInterrupt:
             tqdm_bar.close()
         finally:
-            print_samples(model, enc, args, context_tokens=next(iter(data_loader)), batch_size=1, length=20, nsamples=1, 
-                    temperature=1, top_k=40)
+            sample = print_samples(
+                model, enc, args,
+                # Context is a random sample from the dataset.
+                context_tokens=next(iter(data_loader)),
+                batch_size=1, length=20, nsamples=1,
+                temperature=1, top_k=40)
+            event_writer.add_text('sample', sample, global_example_count)
             checkpoint(model, args)
 
     if args.do_eval:
@@ -156,7 +155,7 @@ def main():
                 eval_loss += loss.item()
                 exp_average_loss = loss.item() if exp_average_loss is None else 0.7*exp_average_loss+0.3*loss.item()
                 nb_steps += 1
-                tqdm_bar.desc = "Eval loss: {:.2e} ppl: {:.2e}".format(exp_average_loss, math.exp(exp_average_loss))
+                tqdm_bar.desc = f"Eval loss: {exp_average_loss:.2e} ppl: {math.exp(exp_average_loss):.2e}"
                 log_tb('loss', loss.item())
                 log_tb('ppl', loss.exp().item())
                 global_example_count+=args.train_batch_size

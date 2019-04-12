@@ -56,6 +56,7 @@ def print_samples(model, enc, args, context_tokens=[], unconditional=True, **kwa
         out = out[:, len(context_tokens):].tolist()
         for i in range(kwargs['batch_size']):
             generated += 1
-            text = enc.decode(out[i])
             print("=" * 40 + " SAMPLE " + str(generated) + " " + "=" * 40)
+            text = enc.decode(out[i])
             print(text)
+    return text
