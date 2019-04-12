@@ -98,7 +98,6 @@ def main():
     # ## Prep optimizer
     # We use OpenAIAdam because that's what run_openai_gpt used
 
-    num_train_epochs, warmup_proportion, max_grad_norm, weight_decay, learning_rate = 3, .002, 1, .01, 6e-5
     from pytorch_pretrained_bert import OpenAIAdam
 
     # Prepare optimizer
@@ -127,7 +126,7 @@ def main():
     # Put model in training mode.
     model.train()
     try:
-        for _ in trange(int(num_train_epochs), desc="Epoch"):
+        for _ in trange(int(args.num_train_epochs), desc="Epoch"):
             tr_loss = 0
             nb_tr_steps = 0
             tqdm_bar = tqdm.tqdm(data_loader, desc="Training")
