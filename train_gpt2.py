@@ -30,6 +30,12 @@ def checkpoint(model, args):
     model_to_save = model.module if hasattr(model, 'module') else model  
     torch.save(model_to_save.state_dict(), output_model_file)
 
+def current_timestamp() -> str:
+    # timestamp format from https://github.com/tensorflow/tensorflow/blob/155b45698a40a12d4fef4701275ecce07c3bb01a/tensorflow/core/platform/default/logging.cc#L80
+    current_seconds = time.time()
+    remainder_micros = int(1e6 * (current_seconds - int(current_seconds)))
+    time_str = time.strftime('%Y-%m-%d_%H-%M-%S', time.localtime(current_seconds))
+    return time_str
 
 def main():
     global global_example_count, event_writer
@@ -57,11 +63,13 @@ def main():
     parser.add_argument('--server_ip', type=str, default='', help="Can be used for distant debugging.")
     parser.add_argument('--server_port', type=str, default='', help="Can be used for distant debugging.")
     parser.add_argument('--distributed', action='store_true', help='Run distributed training')
+    parser.add_argument('--run_name', type=str, default='', help="Name of this run for easier tensorboard analysis")
     parser.add_argument('--logdir',type=str, default='/tmp/runs', help="location of logging directory")
 
     args = parser.parse_args()
     assert args.do_train or args.do_eval, "Specify at least one of do_train or do_eval"
-    os.system('mkdir -p ' + args.logdir)
+    args.logdir = f'{args.logdir}/{args.run_name}-{current_timestamp()}'
+    os.system(f'mkdir -p {args.logdir}')
 
     torch.random.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
