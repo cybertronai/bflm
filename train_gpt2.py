@@ -49,6 +49,7 @@ def main():
                         help="The output directory where the model predictions and checkpoints will be written.")
     parser.add_argument('--train_dataset', type=str, default='')
     parser.add_argument('--eval_dataset', type=str, default='')
+    parser.add_argument('--context_length', type=int, default=128)
     parser.add_argument('--num_train_epochs', type=int, default=3)
     parser.add_argument('--train_batch_size', type=int, default=8)
     parser.add_argument('--eval_batch_size', type=int, default=16)
@@ -90,7 +91,7 @@ def main():
     print('data sample:', decoded[:100])
 
 
-    ds = SampledDataset(sampler, 128)
+    ds = SampledDataset(sampler, args.context_length)
     data_loader = DataLoader(ds, batch_size=args.train_batch_size)
     print('batch shape:', next(iter(data_loader)).shape)
     print('num samples:', sampler.total_size)
@@ -145,7 +146,7 @@ def main():
     except KeyboardInterrupt:
         tqdm_bar.close()
     finally:
-        print_samples(model, enc, args, batch_size=1, length=20, nsamples=1, 
+        print_samples(model, enc, args, context_tokens=next(iter(data_loader)), batch_size=1, length=20, nsamples=1, 
                 temperature=1, top_k=40)
         checkpoint(model, args)
 
