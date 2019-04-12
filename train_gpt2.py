@@ -143,7 +143,7 @@ def main():
                 tqdm_bar.desc = "Training loss: {:.2e} lr: {:.2e}".format(exp_average_loss, optimizer.get_lr()[0])
 
     except KeyboardInterrupt:
-        pass
+        tqdm_bar.close()
     finally:
         print_samples(model, enc, args, batch_size=1, length=20, nsamples=1, 
                 temperature=1, top_k=40)
