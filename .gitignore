@@ -122,3 +122,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 /.DS_Store
+/.idea/encodings.xml
+/.idea/modules.xml
+/.idea
