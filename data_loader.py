@@ -95,14 +95,14 @@ class DataSampler():
                 within_chunk = index - self.boundaries[i]
                 return self.chunks[i][within_chunk:within_chunk + length]
 
-def get_data_loader(dataset_path, enc, args, verbose=True):
+def get_data_loader(dataset_path, enc, batch_size, args, verbose=True):
     data = lazy_load(dataset_path, enc, args)[0]
 
     # Chunk data by context_length
     ds = Subset(data, [
         slice(i, i+args.context_length) 
         for i in range(0, len(data) - (len(data) % args.context_length), args.context_length)])
-    data_loader = DataLoader(ds, batch_size=args.train_batch_size, shuffle=True)
+    data_loader = DataLoader(ds, batch_size=batch_size, shuffle=True)
     if verbose:
         print(f'loaded {len(data)} tokens, {len(ds)} samples')
         decoded = enc.decode(ds[0])

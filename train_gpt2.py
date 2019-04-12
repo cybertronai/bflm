@@ -82,7 +82,7 @@ def main():
     log_tb("first", time.time())
 
     if args.do_train:
-        data_loader = get_data_loader(args.train_dataset, enc, args)
+        data_loader = get_data_loader(args.train_dataset, enc, args.train_batch_size, args)
 
         # ## Prep optimizer
         # We use OpenAIAdam because that's what run_openai_gpt used
@@ -142,25 +142,25 @@ def main():
             checkpoint(model, args)
 
     if args.do_eval:
-        data_loader = get_data_loader(args.eval_dataset, enc, args)
+        data_loader = get_data_loader(args.eval_dataset, enc, args.eval_batch_size, args)
         model.eval()
         nb_steps, eval_loss, exp_average_loss = 0, 0, None
-
-        tqdm_bar = tqdm.tqdm(data_loader, desc="Eval")
-        for step, batch in enumerate(tqdm_bar):
-            # Put model in training mode.
-            batch = batch.to(device)
-            # input_ids, position_ids=None, token_type_ids=None, lm_labels=None, past=None
-            # if lm_labels, outputs loss
-            loss = model(batch, lm_labels=batch)
-            eval_loss += loss.item()
-            exp_average_loss = loss.item() if exp_average_loss is None else 0.7*exp_average_loss+0.3*loss.item()
-            nb_steps += 1
-            tqdm_bar.desc = "Eval loss: {:.2e} ppl: {:.2e}".format(exp_average_loss, math.exp(exp_average_loss))
-            log_tb('loss', loss.item())
-            log_tb('ppl', loss.exp().item())
-            global_example_count+=args.train_batch_size
-        print('Final ppl:', eval_loss / nb_steps)
+        with torch.no_grad():
+            tqdm_bar = tqdm.tqdm(data_loader, desc="Eval")
+            for step, batch in enumerate(tqdm_bar):
+                # Put model in training mode.
+                batch = batch.to(device)
+                # input_ids, position_ids=None, token_type_ids=None, lm_labels=None, past=None
+                # if lm_labels, outputs loss
+                loss = model(batch, lm_labels=batch)
+                eval_loss += loss.item()
+                exp_average_loss = loss.item() if exp_average_loss is None else 0.7*exp_average_loss+0.3*loss.item()
+                nb_steps += 1
+                tqdm_bar.desc = "Eval loss: {:.2e} ppl: {:.2e}".format(exp_average_loss, math.exp(exp_average_loss))
+                log_tb('loss', loss.item())
+                log_tb('ppl', loss.exp().item())
+                global_example_count+=args.train_batch_size
+        print('Final ppl:', math.exp(eval_loss / nb_steps))
 
 
 
