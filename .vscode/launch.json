@@ -10,6 +10,10 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
+            "args": [
+                "--output_dir", "/tmp/bflm",
+                "--train_dataset", "train_gpt2.py"
+            ]
         },
         {
             "name": "Python: Remote Attach",

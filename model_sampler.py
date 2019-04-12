@@ -2,7 +2,6 @@
 
 import torch
 import torch.nn.functional as F
-import numpy as np
 from tqdm import trange
 
 def top_k_logits(logits, k):

@@ -3,22 +3,23 @@
 
 import argparse
 import logging
+import math
 import os
+import time
 
 import numpy as np
 import torch
-import time
 import torch.nn.functional as F
 import tqdm
+from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader, Dataset
 from tqdm import trange
 
 import pytorch_pretrained_bert
-from data_loader import DataSampler, load_dataset
+from data_loader import get_data_loader
 from model_sampler import print_samples
 from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer, OpenAIAdam
 
-from tensorboardX import SummaryWriter
 
 def log_tb(tag, val):
   """Log value to tensorboard (relies on global_example_count rather than step count to give comparable graphs across batch sizes)"""
@@ -33,17 +34,6 @@ def checkpoint(model, args):
     model_to_save = model.module if hasattr(model, 'module') else model  
     torch.save(model_to_save.state_dict(), output_model_file)
 
-class SampledDataset(Dataset):
-    def __init__(self, sampler, length):
-        self.sampler = sampler
-        self.length = length
-    def __len__(self):
-        # This is a lie
-        return self.sampler.total_size
-    def __getitem__(self, i):
-        # TODO: use the index
-        return self.sampler.sample(self.length)
-    
 
 def main():
     global global_example_count, event_writer
@@ -60,10 +50,10 @@ def main():
     parser.add_argument('--eval_dataset', type=str, default='')
     parser.add_argument('--context_length', type=int, default=128)
     parser.add_argument('--num_train_epochs', type=int, default=3)
-    parser.add_argument('--train_batch_size', type=int, default=8)
+    parser.add_argument('--train_batch_size', type=int, default=16)
     parser.add_argument('--eval_batch_size', type=int, default=16)
     parser.add_argument('--max_grad_norm', type=int, default=1)
-    parser.add_argument('--learning_rate', type=float, default=6.25e-5)
+    parser.add_argument('--learning_rate', type=float, default=1e-2)
     parser.add_argument('--warmup_proportion', type=float, default=0.002)
     parser.add_argument('--lr_schedule', type=str, default='warmup_linear')
     parser.add_argument('--weight_decay', type=float, default=0.01)
@@ -91,92 +81,87 @@ def main():
     event_writer = SummaryWriter(args.logdir)
     log_tb("first", time.time())
 
-    
+    if args.do_train:
+        data_loader = get_data_loader(args.train_dataset, enc, args)
 
-    # TODO: add args here
-    # print_samples(args)
+        # ## Prep optimizer
+        # We use OpenAIAdam because that's what run_openai_gpt used
+        # Prepare optimizer
+        param_optimizer = list(model.named_parameters())
+        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+        optimizer_grouped_parameters = [
+            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+            ]
+        num_train_optimization_steps = len(data_loader) * args.num_train_epochs
 
-    # ## Prep dataset
-    cache_path = f'{args.output_dir}/{os.path.basename(args.train_dataset)}.npz'
-    if not os.path.exists(cache_path):
-        train_data = load_dataset(enc, args.train_dataset)
-        # Cache encoded data.
-        print(f'caching data to {cache_path}')
-        np.savez_compressed(cache_path, *train_data)
-    else:
-        train_data = load_dataset(enc, cache_path)
-    assert len(train_data) > 0
-    
-    print(f'loaded {len(train_data)} lines')
-
-    sampler = DataSampler(train_data)
-    s = sampler.sample(1024)
-    decoded = enc.decode(s)
-    print('data sample:', decoded[:100])
+        optimizer = OpenAIAdam(optimizer_grouped_parameters,
+                            lr=args.learning_rate,
+                            warmup=args.warmup_proportion,
+                            max_grad_norm=args.max_grad_norm,
+                            weight_decay=args.weight_decay,
+                            t_total=num_train_optimization_steps)
 
 
-    ds = SampledDataset(sampler, args.context_length)
-    data_loader = DataLoader(ds, batch_size=args.train_batch_size)
-    print('batch shape:', next(iter(data_loader)).shape)
-    print('num samples:', sampler.total_size)
+        # ## Train loop
+        # Based on `run_openai_gpt.py`
+        nb_tr_steps, tr_loss, exp_average_loss = 0, 0, None
+
+        # Reset all model weights so we can train from scratch.
+        model.apply(model.init_weights)
+
+        try:
+            for _ in trange(int(args.num_train_epochs), desc="Epoch"):
+                tr_loss = 0
+                nb_tr_steps = 0
+                tqdm_bar = tqdm.tqdm(data_loader, desc="Training")
+                for step, batch in enumerate(tqdm_bar):
+                    # Put model in training mode.
+                    model.train()
+                    batch = batch.to(device)
+                    # input_ids, position_ids=None, token_type_ids=None, lm_labels=None, past=None
+                    # if lm_labels, outputs loss
+                    loss = model(batch, lm_labels=batch)
+                    loss.backward()
+                    optimizer.step()
+                    optimizer.zero_grad()
+                    tr_loss += loss.item()
+                    exp_average_loss = loss.item() if exp_average_loss is None else 0.7*exp_average_loss+0.3*loss.item()
+                    nb_tr_steps += 1
+                    tqdm_bar.desc = "Training loss: {:.2e} lr: {:.2e}".format(exp_average_loss, optimizer.get_lr()[0])
+                    log_tb('loss', loss.item())
+                    log_tb('lr', optimizer.get_lr()[0])
+                    global_example_count+=args.train_batch_size
 
 
-    # ## Prep optimizer
-    # We use OpenAIAdam because that's what run_openai_gpt used
-    # Prepare optimizer
-    param_optimizer = list(model.named_parameters())
-    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-    optimizer_grouped_parameters = [
-        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-        ]
-    num_train_optimization_steps = len(data_loader) * args.num_train_epochs
+        except KeyboardInterrupt:
+            tqdm_bar.close()
+        finally:
+            print_samples(model, enc, args, context_tokens=next(iter(data_loader)), batch_size=1, length=20, nsamples=1, 
+                    temperature=1, top_k=40)
+            checkpoint(model, args)
 
-    optimizer = OpenAIAdam(optimizer_grouped_parameters,
-                        lr=args.learning_rate,
-                        warmup=args.warmup_proportion,
-                        max_grad_norm=args.max_grad_norm,
-                        weight_decay=args.weight_decay,
-                        t_total=num_train_optimization_steps)
+    if args.do_eval:
+        data_loader = get_data_loader(args.eval_dataset, enc, args)
+        model.eval()
+        nb_steps, eval_loss, exp_average_loss = 0, 0, None
 
+        tqdm_bar = tqdm.tqdm(data_loader, desc="Eval")
+        for step, batch in enumerate(tqdm_bar):
+            # Put model in training mode.
+            batch = batch.to(device)
+            # input_ids, position_ids=None, token_type_ids=None, lm_labels=None, past=None
+            # if lm_labels, outputs loss
+            loss = model(batch, lm_labels=batch)
+            eval_loss += loss.item()
+            exp_average_loss = loss.item() if exp_average_loss is None else 0.7*exp_average_loss+0.3*loss.item()
+            nb_steps += 1
+            tqdm_bar.desc = "Eval loss: {:.2e} ppl: {:.2e}".format(exp_average_loss, math.exp(exp_average_loss))
+            log_tb('loss', loss.item())
+            log_tb('ppl', loss.exp().item())
+            global_example_count+=args.train_batch_size
+        print('Final ppl:', eval_loss / nb_steps)
 
-    # ## Train loop
-    # Based on `run_openai_gpt.py`
-    nb_tr_steps, tr_loss, exp_average_loss = 0, 0, None
-
-    # Reset all model weights so we can train from scratch.
-    model.apply(model.init_weights)
-
-    try:
-        for _ in trange(int(args.num_train_epochs), desc="Epoch"):
-            tr_loss = 0
-            nb_tr_steps = 0
-            tqdm_bar = tqdm.tqdm(data_loader, desc="Training")
-            for step, batch in enumerate(tqdm_bar):
-                # Put model in training mode.
-                model.train()
-                batch = batch.to(device)
-                # input_ids, position_ids=None, token_type_ids=None, lm_labels=None, past=None
-                # if lm_labels, outputs loss
-                loss = model(batch, lm_labels=batch)
-                loss.backward()
-                optimizer.step()
-                optimizer.zero_grad()
-                tr_loss += loss.item()
-                exp_average_loss = loss.item() if exp_average_loss is None else 0.7*exp_average_loss+0.3*loss.item()
-                nb_tr_steps += 1
-                tqdm_bar.desc = "Training loss: {:.2e} lr: {:.2e}".format(exp_average_loss, optimizer.get_lr()[0])
-                log_tb('loss', loss.item())
-                log_tb('lr', optimizer.get_lr()[0])
-                global_example_count+=args.train_batch_size
-
-
-    except KeyboardInterrupt:
-        tqdm_bar.close()
-    finally:
-        print_samples(model, enc, args, context_tokens=next(iter(data_loader)), batch_size=1, length=20, nsamples=1, 
-                temperature=1, top_k=40)
-        checkpoint(model, args)
 
 
 if __name__ == '__main__':

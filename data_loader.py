@@ -5,6 +5,7 @@ import numpy as np
 import os
 import random
 import tqdm
+from torch.utils.data import DataLoader, Dataset, Subset
 
 def load_dataset(enc, path, combine=50000):
     paths = []
@@ -55,7 +56,20 @@ def binary_search(f, lo, hi):
     return hi
 
 
-class DataSampler(object):
+
+class SampledDataset(Dataset):
+    def __init__(self, sampler, length):
+        self.sampler = sampler
+        self.length = length
+    def __len__(self):
+        # This is a lie
+        return self.sampler.total_size
+    def __getitem__(self, i):
+        # TODO: use the index
+        return self.sampler.sample(self.length)
+
+
+class DataSampler():
     """Fairly samples a slice from a set of variable sized chunks.
 
     'Fairly' means that the distribution is the same as sampling from one concatenated chunk,
@@ -80,3 +94,34 @@ class DataSampler(object):
             if self.boundaries[i + 1] > index + length:
                 within_chunk = index - self.boundaries[i]
                 return self.chunks[i][within_chunk:within_chunk + length]
+
+def get_data_loader(dataset_path, enc, args, verbose=True):
+    data = lazy_load(dataset_path, enc, args)[0]
+
+    # Chunk data by context_length
+    ds = Subset(data, [
+        slice(i, i+args.context_length) 
+        for i in range(0, len(data) - (len(data) % args.context_length), args.context_length)])
+    data_loader = DataLoader(ds, batch_size=args.train_batch_size, shuffle=True)
+    if verbose:
+        print(f'loaded {len(data)} tokens, {len(ds)} samples')
+        decoded = enc.decode(ds[0])
+        print('data sample:', decoded[:100])
+        print('batch shape:', next(iter(data_loader)).shape)
+
+    return data_loader
+
+def lazy_load(dataset_path, enc, args):
+    cache_path = f'{args.output_dir}/{os.path.basename(dataset_path)}.npz'
+    if not os.path.exists(cache_path):
+        # Set combine to a huge number so everything is 1 vector
+        data = load_dataset(enc, dataset_path, combine=1e99)
+        # Cache encoded data.
+        print(f'caching data to {cache_path}')
+        np.savez_compressed(cache_path, *data)
+    else:
+        data = load_dataset(enc, cache_path)
+    assert len(data) > 0
+    return data
+
+    
