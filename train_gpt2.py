@@ -21,7 +21,8 @@ from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer, OpenAIAdam
 def checkpoint(model, args):
     output_model_file = os.path.join(args.output_dir, "pytorch_model.bin")
     print('saving checkpoint to', output_model_file)
-    model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
+    # Only save the model itself
+    model_to_save = model.module if hasattr(model, 'module') else model  
     torch.save(model_to_save.state_dict(), output_model_file)
 
 class SampledDataset(Dataset):
@@ -121,14 +122,14 @@ def main():
     # Reset all model weights so we can train from scratch.
     model.apply(model.init_weights)
 
-    # Put model in training mode.
-    model.train()
     try:
         for _ in trange(int(args.num_train_epochs), desc="Epoch"):
             tr_loss = 0
             nb_tr_steps = 0
             tqdm_bar = tqdm.tqdm(data_loader, desc="Training")
             for step, batch in enumerate(tqdm_bar):
+                # Put model in training mode.
+                model.train()
                 batch = batch.to(device)
                 # input_ids, position_ids=None, token_type_ids=None, lm_labels=None, past=None
                 # if lm_labels, outputs loss
@@ -142,6 +143,8 @@ def main():
                 tqdm_bar.desc = "Training loss: {:.2e} lr: {:.2e}".format(exp_average_loss, optimizer.get_lr()[0])
 
     except KeyboardInterrupt:
+        pass
+    finally:
         print_samples(model, enc, args, batch_size=1, length=20, nsamples=1, 
                 temperature=1, top_k=40)
         checkpoint(model, args)
