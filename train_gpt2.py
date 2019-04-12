@@ -15,7 +15,7 @@ from tqdm import trange
 import pytorch_pretrained_bert
 from data_loader import DataSampler, load_dataset
 from model_sampler import print_samples
-from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer
+from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer, OpenAIAdam
 
 
 def checkpoint(model, args):
@@ -97,9 +97,6 @@ def main():
 
     # ## Prep optimizer
     # We use OpenAIAdam because that's what run_openai_gpt used
-
-    from pytorch_pretrained_bert import OpenAIAdam
-
     # Prepare optimizer
     param_optimizer = list(model.named_parameters())
     no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
@@ -107,7 +104,8 @@ def main():
         {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
-    num_train_optimization_steps = len(data_loader) * args.num_train_epochs // args.train_batch_size
+    num_train_optimization_steps = len(data_loader) * args.num_train_epochs
+
     optimizer = OpenAIAdam(optimizer_grouped_parameters,
                         lr=args.learning_rate,
                         warmup=args.warmup_proportion,
