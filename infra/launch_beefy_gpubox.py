@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Launch p3dn instance ($30/hour)
+# Launch p3.16 instance ($24/hour)
 
 import argparse
 import os
@@ -12,7 +12,7 @@ parser.add_argument('--name', type=str, default='beefy_gpubox',
 parser.add_argument('--image-name', type=str,
                     default='Deep Learning AMI (Ubuntu) Version 22.0',
                     help="name of AMI to use ")
-parser.add_argument('--instance-type', type=str, default='p3dn.24xlarge',
+parser.add_argument('--instance-type', type=str, default='p3.16xlarge',
                     help="type of instance")
 parser.add_argument('--password',
                     default='DefaultNotebookPasswordPleaseChange',
@@ -26,7 +26,8 @@ ncluster.set_backend('aws')
 def main():
   task = ncluster.make_task(name=args.name,
                             instance_type=args.instance_type,
-                            image_name=args.image_name)
+                            image_name=args.image_name,
+                            disk_size=1000)
 
   # upload notebook config with provided password
   jupyter_config_fn = _create_jupyter_config(args.password)
