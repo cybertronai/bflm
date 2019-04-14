@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # Evaluate GPT-2 model on lambada dataset.
-# This compares match in the last BPE token rather than match in last predicted word. A heuristic --ignore-fragments will throw out any examples where last word doesn't encode to single word
+# This compares match in the last BPE token rather than match in last predicted word. A heuristic --ignore-fragments will throw out any examples where last word doesn't encode to single BPE token
 #
 #
 # Example usage:
