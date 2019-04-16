@@ -117,7 +117,7 @@ def parse_args():
     parser.add_argument('--weight_decay', type=float, default=0.01)
 
     parser.add_argument('--logdir_root', type=str, default='/ncluster/runs', help="where logs and events go")
-    parser.add_argument('--run_name', type=str, default='default', help="name of run")
+    parser.add_argument('--run_name', type=str, default='deleteme', help="name of run")
 
     parser.add_argument('--print_freq', '-p', default=10, type=int,
                         metavar='N', help='log/print every this many steps (default: 5)')
@@ -134,18 +134,34 @@ def main():
 
     args = parse_args()
 
+    
+    torch.random.manual_seed(args.seed)
+    torch.cuda.manual_seed(args.seed)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    args.device = device
+    use_cuda = (str(device) == 'cuda')
+
+    if not use_cuda:
+        print(f'WARNING: --fp16 requires --cuda, have {device}, ignoring --fp16 option')
+        args.fp16 = False
+    else:
+        try:
+            from apex.fp16_utils import FP16_Optimizer
+        except:
+            print('WARNING: apex not installed, ignoring --fp16 option')
+            args.fp16 = False
+
     logdir = f'{args.logdir_root}/{args.run_name}-{current_timestamp()}'
     os.system(f'mkdir -p {logdir}')
     os.system(f'mkdir -p {args.output_dir}')
     assert os.path.exists(args.data), f"Didn't find {args.data}"
 
-    torch.random.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    args.device = device
-
     enc = GPT2Tokenizer.from_pretrained(args.model_name_or_path)
     model = GPT2LMHeadModel.from_pretrained(args.model_name_or_path)
+
+    if args.fp16:
+      model = model.half()
+    
     model.to(device)
 
     # setup TensorBoard logging
@@ -174,6 +190,14 @@ def main():
                            max_grad_norm=args.max_grad_norm,
                            weight_decay=args.weight_decay,
                            t_total=num_train_optimization_steps)
+
+    if use_cuda and args.fp16:
+      # If args.dynamic_loss_scale is False, static_loss_scale will be used.
+      # If args.dynamic_loss_scale is True, it will take precedence over static_loss_scale.
+      optimizer = FP16_Optimizer(optimizer,
+                                 static_loss_scale = 1,
+                                 dynamic_loss_scale = 0,
+                                 dynamic_loss_args = {'init_scale': 2 ** 16})
 
     # Reset all model weights so we can train from scratch.
     model.apply(model.init_weights)
@@ -213,9 +237,10 @@ def main():
                 log_tb("memory/max_cached_gb", torch.cuda.max_memory_cached() / 1e9)
 
                 print('loss', loss.item())
-                print('lr', optimizer.get_lr()[0])
+                # FP16Optimizer doesn't support get_lr
+                #                print('lr', optimizer.get_lr()[0])
                 log_tb('loss', loss.item())
-                log_tb('lr', optimizer.get_lr()[0])
+                #                log_tb('lr', optimizer.get_lr()[0])
 
                 with timeit('sample'):
                     sample = print_samples(
