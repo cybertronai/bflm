@@ -44,6 +44,9 @@ parser.add_argument('--ignore-fragments',  action='store_true', help="Whether to
 parser.add_argument('--word-eval',  action='store_true', help="whether to do evaluation on words rather than BPE "
                                                               "tokens.")
 parser.add_argument('--print-every-n',  type=int, default=100, help='print results every n lines')
+parser.add_argument('--beam-width',  type=int, default=128, help='predict this many results before stopword filtering')
+
+
 args = parser.parse_args()
 
 
@@ -56,9 +59,14 @@ enc = GPT2Tokenizer.from_pretrained(model_name)
 model = GPT2LMHeadModel.from_pretrained(model_name)
 model.to(device)
 
+stopwords = {'ourselves', 'hers', 'between', 'yourself', 'but', 'again', 'there', 'about', 'once', 'during', 'out', 'very', 'having', 'with', 'they', 'own', 'an', 'be', 'some', 'for', 'do', 'its', 'yours', 'such', 'into', 'of', 'most', 'itself', 'other', 'off', 'is', 's', 'am', 'or', 'who', 'as', 'from', 'him', 'each', 'the', 'themselves', 'until', 'below', 'are', 'we', 'these', 'your', 'his', 'through', 'don', 'nor', 'me', 'were', 'her', 'more', 'himself', 'this', 'down', 'should', 'our', 'their', 'while', 'above', 'both', 'up', 'to', 'ours', 'had', 'she', 'all', 'no', 'when', 'at', 'any', 'before', 'them', 'same', 'and', 'been', 'have', 'in', 'will', 'on', 'does', 'yourselves', 'then', 'that', 'because', 'what', 'over', 'why', 'so', 'can', 'did', 'not', 'now', 'under', 'he', 'you', 'herself', 'has', 'just', 'where', 'too', 'only', 'myself', 'which', 'those', 'i', 'after', 'few', 'whom', 't', 'being', 'if', 'theirs', 'my', 'against', 'a', 'by', 'doing', 'it', 'how', 'further', 'was', 'here', 'than'}
+
 
 def argmax(t):
     return int(torch.argmax(t).item())
+
+def to_list(tensor):
+    return list(tensor.cpu().numpy())
 
 
 def remove_last_word(line):
@@ -81,11 +89,31 @@ def predict(line, max_predictions):
 
     for i in range(max_predictions):
         logits, state = model(line_encoded, past=state)
-        predicted = argmax(logits[0,-1,:])
-
-        # same as [[predicted]] but as tensor and on GPU
-        _, line_encoded = torch.topk(logits[:,-1,:], k=1, dim=-1)
         
+        #        predicted = argmax(logits[0,-1,:])
+
+        # [[idx1, idx2, ...]] 
+        _, line_encoded_candidates = torch.topk(logits[:,-1,:], k=args.beam_width, dim=-1)
+
+        # determine which candidates are stopwords by decoding them and
+        # comparing against NLTK stopword list
+
+        line_encoded_candidates = to_list(line_encoded_candidates[0])
+        is_stopword = []
+        for s in line_encoded_candidates:
+            is_stopword.append(enc.decode([s.item()]).strip() in stopwords)
+
+        # find first prediction which is not a stopword
+        predicted = None
+        for (idx, candidate) in enumerate(line_encoded_candidates):
+            if is_stopword[idx]:
+                #                print('skipping stopword ', idx)
+                continue
+            else:
+                predicted = candidate
+                break
+        assert predicted is not None
+        line_encoded = torch.tensor([[predicted]]).to(device)
         line_encoded_list.append(predicted)
 
     return enc.decode(line_encoded_list)
