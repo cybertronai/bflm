@@ -2,12 +2,12 @@
 # Evaluate GPT-2 model on lambada dataset.
 
 #  ...
-#  4900/ 5153, acc: 0.26
-#  5000/ 5153, acc: 0.26
-#  5100/ 5153, acc: 0.26
-#
+#  5000/ 5153, acc: 0.31
+#  5100/ 5153, acc: 0.32
 # Final accuracy
-#  acc: 0.26
+# acc: 0.31
+#
+# Before stopword filtering got acc: 0.26
 #
 # Does line-by-line prediction of several BPE tokens, and compares the last
 # word.
