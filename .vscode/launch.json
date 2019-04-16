@@ -12,7 +12,9 @@
             "console": "integratedTerminal",
             "args": [
                 "--output_dir", "/tmp/bflm",
-                "--train_dataset", "train_gpt2.py"
+                "--train_dataset", "train_gpt2.py",
+                "--do_train",
+                "--context_length", "1024"
             ]
         },
         {

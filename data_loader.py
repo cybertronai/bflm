@@ -2,8 +2,8 @@
 
 import argparse
 import glob
+import hashlib
 import os
-import random
 
 import numpy as np
 import tqdm
@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader, Dataset, Subset
 from pytorch_pretrained_bert import GPT2Tokenizer
 
 
-def load_dataset(enc, path, combine=50000):
+def load_dataset(enc, path, args, combine=50000):
     paths = []
     if os.path.isfile(path):
         # Simple file
@@ -37,7 +37,13 @@ def load_dataset(enc, path, combine=50000):
         else:
             # Plain text
             with open(path, 'r') as fp:
-                raw_text += fp.read()
+                text = fp.read()
+                print(args.min_file_len, len(text))
+                if args.min_file_len and len(text) < args.min_file_len:
+                    continue
+                if args.max_file_len and len(text) > args.max_file_len:
+                    continue
+                raw_text += text
             if len(raw_text) >= combine:
                 tokens = np.stack(enc.encode(raw_text))
                 token_chunks.append(tokens)
@@ -67,17 +73,24 @@ def get_data_loader(dataset_path, enc, batch_size, args, verbose=True):
     return data_loader
 
 def lazy_load(dataset_path, enc, args):
-    cache_path = f'{args.output_dir}/{os.path.basename(dataset_path)}.{abs(hash(dataset_path)) % (10 ** 8)}.npz'
-    if not os.path.exists(cache_path):
+    hash_ = hashlib.sha1((
+        dataset_path + 
+        ''.join((str(x) for x in (args.min_file_len, args.max_file_len) if x))
+        ).encode()).hexdigest()[:8]
+    cache_path = f'{args.output_dir}/{os.path.basename(dataset_path)}.{hash_}.npz'
+    if os.path.exists(cache_path):
+        print('found cache at', cache_path)
+        data = load_dataset(enc, cache_path, args)
+    else:
         print('loading data from', dataset_path)
         # Set combine to a huge number so everything is 1 vector
-        data = load_dataset(enc, dataset_path, combine=1e99)
+        data = load_dataset(enc, dataset_path, args, combine=1e99)
         # Cache encoded data.
+        assert len(data) > 0, 'Empty dataset, check ' + dataset_path
         print(f'caching data to {cache_path}')
         np.savez_compressed(cache_path, *data)
-    else:
-        data = load_dataset(enc, cache_path)
-    assert len(data) > 0
+
+    assert len(data) > 0, 'Empty dataset, check ' + dataset_path
     return data
 
 def main():
@@ -88,6 +101,9 @@ def main():
     parser.add_argument('--dataset_path', type=str, default='')
     parser.add_argument('--model_name_or_path', type=str, default='gpt2',
                         help='pretrained model name')
+    parser.add_argument('--min_file_len', type=int, help="When loading dataset, throw out files with fewer than this many characters")
+    parser.add_argument('--max_file_len', type=int, help="When loading dataset, throw out files with greater than this many characters")
+
     args = parser.parse_args()
     enc = GPT2Tokenizer.from_pretrained(args.model_name_or_path)
     _ = lazy_load(args.dataset_path, enc, args)

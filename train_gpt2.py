@@ -14,7 +14,7 @@ from tqdm import trange
 
 from data_loader import get_data_loader
 from model_sampler import print_samples
-from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer, OpenAIAdam
+from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer, OpenAIAdam, GPT2Config
 
 
 def log_tb(tag, val):
@@ -65,6 +65,8 @@ def main():
     parser.add_argument('--distributed', action='store_true', help='Run distributed training')
     parser.add_argument('--run_name', type=str, default='', help="Name of this run for easier tensorboard analysis")
     parser.add_argument('--logdir',type=str, default='/tmp/runs', help="location of logging directory")
+    parser.add_argument('--min_file_len', type=int, help="When loading dataset, throw out files with fewer than this many characters")
+    parser.add_argument('--max_file_len', type=int, help="When loading dataset, throw out files with greater than this many characters")
 
     args = parser.parse_args()
     assert args.do_train or args.do_eval, "Specify at least one of do_train or do_eval"
@@ -78,6 +80,9 @@ def main():
 
     enc = GPT2Tokenizer.from_pretrained(args.model_name_or_path)
     model = GPT2LMHeadModel.from_pretrained(args.model_name_or_path)
+    # Uncomment below for bigger context length
+    #config = GPT2Config(n_ctx=1025, n_positions=1025)
+    #model = GPT2LMHeadModel(config)
     model.to(device)
 
     # setup TensorBoard logging
