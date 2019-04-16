@@ -38,7 +38,6 @@ def load_dataset(enc, path, args, combine=50000):
             # Plain text
             with open(path, 'r') as fp:
                 text = fp.read()
-                print(args.min_file_len, len(text))
                 if args.min_file_len and len(text) < args.min_file_len:
                     continue
                 if args.max_file_len and len(text) > args.max_file_len:
