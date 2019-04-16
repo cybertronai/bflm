@@ -7,7 +7,7 @@ import os
 import argparse
 
 parser = argparse.ArgumentParser(description='')
-parser.add_argument('--logdir_root', type=str, default='/tmp/runs', help="where logs and events go")
+parser.add_argument('--logdir_root', type=str, default='/ncluster/runs', help="where logs and events go")
 parser.add_argument('--dryrun', help="only print actions, don't don anything", action='store_true')
 args = parser.parse_args()
 
