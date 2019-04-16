@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # Evaluate GPT-2 model on lambada dataset.
-
+# Discussion on https://github.com/huggingface/pytorch-pretrained-BERT/issues/491
+#
+#
 # No stopword filtering
 # Final accuracy
 # acc: 0.26
