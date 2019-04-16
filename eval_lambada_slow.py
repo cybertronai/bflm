@@ -1,13 +1,34 @@
 #!/usr/bin/env python
 # Evaluate GPT-2 model on lambada dataset.
 
+# No stopword filtering
+# Final accuracy
+# acc: 0.26
+#
+# 
+# Stopword filtering:
+# python eval_lambada_slow.py
 #  ...
-#  5000/ 5153, acc: 0.31
-#  5100/ 5153, acc: 0.32
+# 5100/ 5153, acc: 31.54
 # Final accuracy
 # acc: 0.31
 #
-# Before stopword filtering got acc: 0.26
+#
+# After applying moses detokenizer
+# python eval_lambada_slow.py --detokenize
+# 5000/ 5153, acc: 32.97
+# 5100/ 5153, acc: 33.03
+# Final accuracy
+# acc: 0.33
+#
+# After applying moses and "haven't" detokenizer
+# python eval_lambada_slow.py --detokenize --detokenize_havent
+#
+# 5000/ 5153, acc: 33.01
+# 5100/ 5153, acc: 33.09
+# Final accuracy
+# acc: 33.11
+#
 #
 # Does line-by-line prediction of several BPE tokens, and compares the last
 # word.
@@ -45,6 +66,17 @@ parser.add_argument('--word-eval',  action='store_true', help="whether to do eva
                                                               "tokens.")
 parser.add_argument('--print-every-n',  type=int, default=100, help='print results every n lines')
 parser.add_argument('--beam-width',  type=int, default=128, help='predict this many results before stopword filtering')
+parser.add_argument('--detokenize',  action='store_true', help='apply moses detokenizer to input')
+parser.add_argument('--detokenize_havent',  action='store_true', help="also try to merge have n't to haven't")
+
+
+import sys
+from sacremoses import MosesTokenizer, MosesDetokenizer
+detokenizer = MosesDetokenizer(lang='en')
+
+def detokenize(line):
+    toks = line.split()
+    return detokenizer.detokenize(toks)
 
 
 args = parser.parse_args()
@@ -80,6 +112,7 @@ def remove_last_word(line):
 def predict(line, max_predictions):
     """Give continuation of the line with at most max_predictions BPE tokens. Returns line extended with predictions of
      the model."""
+
     line_encoded = enc.encode(line)
     line_encoded = torch.tensor(line_encoded)
     line_encoded = line_encoded.unsqueeze_(0) # batch of size 1
@@ -127,6 +160,12 @@ def main():
     total = 0
     for i, line in enumerate(lines):
         line = line.strip()
+        if args.detokenize:
+          line = detokenizer.detokenize(line.split())
+
+        if args.detokenize_havent:
+          line = line.replace(" n't", "n't")
+
         context, last_word = remove_last_word(line)
 
         # because BPE tokens can span words, predict several BPE tokens
@@ -145,12 +184,12 @@ def main():
         predictions_file.write(f"{line}\n{predicted_word}\n{is_error}\n\n")
 
         if i%args.print_every_n == 0:
-            print(f"{i:5d}/{len(lines):5d}, acc: {1-errors/total:.2f}")
+            print(f"{i:5d}/{len(lines):5d}, acc: {100*(1-errors/total):.2f}")
             predictions_file.flush()
 
     predictions_file.close()
     print("Final accuracy")
-    print(f"acc: {1-errors/total:.2f}")
+    print(f"acc: {100*(1-errors/total):.2f}")
 
 
 if __name__=='__main__':
