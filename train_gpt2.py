@@ -93,6 +93,7 @@ def main():
     print(f"Logging to {args.logdir}")
     event_writer = SummaryWriter(args.logdir)
     log_tb("first", time.time())
+    event_writer.add_text('args', str(args))
 
     if args.do_train:
         data_loader = get_data_loader(args.train_dataset, enc, args.train_batch_size, args)
