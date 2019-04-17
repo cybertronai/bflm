@@ -179,7 +179,7 @@ def main():
                 log_tb('loss', loss.item())
                 log_tb('ppl', loss.exp().item())
                 global_example_count+=args.train_batch_size
-        print('Final ppl:', math.exp(eval_loss / nb_steps))
+        print(f'Final loss: {(eval_loss / nb_steps):.2e} ppl: {math.exp(eval_loss / nb_steps):.2e}')
 
 
 
