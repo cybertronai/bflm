@@ -51,7 +51,7 @@ def main():
     parser.add_argument('--train_dataset', type=str, default='')
     parser.add_argument('--eval_dataset', type=str, default='')
     parser.add_argument('--context_length', type=int, default=1024)
-    parser.add_argument('--num_train_epochs', type=int, default=3)
+    parser.add_argument('--num_train_epochs', type=int, default=10)
     parser.add_argument('--train_batch_size', type=int, default=16)
     parser.add_argument('--eval_batch_size', type=int, default=16)
     parser.add_argument('--max_grad_norm', type=int, default=1)
@@ -67,6 +67,7 @@ def main():
     parser.add_argument('--logdir',type=str, default='/tmp/runs', help="location of logging directory")
     parser.add_argument('--min_file_len', type=int, help="When loading dataset, throw out files with fewer than this many characters")
     parser.add_argument('--max_file_len', type=int, help="When loading dataset, throw out files with greater than this many characters")
+    parser.add_argument('--scratch', type=bool, help='Don\'t start with pretrained model, train from scratch')
 
     args = parser.parse_args()
     assert args.do_train or args.do_eval, "Specify at least one of do_train or do_eval"
@@ -79,10 +80,12 @@ def main():
     args.device = device
 
     enc = GPT2Tokenizer.from_pretrained(args.model_name_or_path)
-    model = GPT2LMHeadModel.from_pretrained(args.model_name_or_path)
-    # Uncomment below for bigger context length
-    #config = GPT2Config(n_ctx=1025, n_positions=1025)
-    #model = GPT2LMHeadModel(config)
+    if args.scratch:
+        config = GPT2Config(n_ctx=args.context_length, n_positions=args.context_length)
+        model = GPT2LMHeadModel(config)
+    else:
+        model = GPT2LMHeadModel.from_pretrained(args.model_name_or_path)
+
     model.to(device)
 
     # setup TensorBoard logging
