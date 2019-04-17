@@ -23,6 +23,15 @@ module_path = os.path.dirname(os.path.abspath(__file__))
 
 ncluster.set_backend('aws')
 
+# To enable table of contents plugin
+#
+# source activate pytorch_p36
+# conda install -c conda-forge jupyter_nbextensions_configurator -y
+# conda install -c conda-forge jupyter_contrib_nbextensions -y
+# conda install ipyparallel -y
+# jupyter nbextension enable toc2/main
+
+
 def main():
   task = ncluster.make_task(name=args.name,
                             instance_type=args.instance_type,
