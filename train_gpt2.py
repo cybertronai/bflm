@@ -9,12 +9,12 @@ import time
 import torch
 import tqdm
 from tensorboardX import SummaryWriter
-from torch.utils.data import DataLoader, Dataset
-from tqdm import trange
 
+import pytorch_pretrained_bert
 from data_loader import get_data_loader
 from model_sampler import print_samples
-from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer, OpenAIAdam, GPT2Config
+from pytorch_pretrained_bert import (GPT2Config, GPT2LMHeadModel,
+                                     GPT2Tokenizer, OpenAIAdam)
 
 
 def log_tb(tag, val):
@@ -24,11 +24,13 @@ def log_tb(tag, val):
 
 
 def checkpoint(model, args):
-    output_model_file = os.path.join(args.output_dir, "pytorch_model.bin")
+    output_model_file = os.path.join(args.output_dir, pytorch_pretrained_bert.modeling_gpt2.WEIGHTS_NAME)
     print('saving checkpoint to', output_model_file)
     # Only save the model itself
     model_to_save = model.module if hasattr(model, 'module') else model  
     torch.save(model_to_save.state_dict(), output_model_file)
+    with open(os.path.join(args.output_dir, pytorch_pretrained_bert.modeling_gpt2.CONFIG_NAME), 'w', encoding='utf-8') as f:
+        f.write(model_to_save.config.to_json_string())
 
 def current_timestamp() -> str:
     # timestamp format from https://github.com/tensorflow/tensorflow/blob/155b45698a40a12d4fef4701275ecce07c3bb01a/tensorflow/core/platform/default/logging.cc#L80
@@ -79,7 +81,8 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     args.device = device
 
-    enc = GPT2Tokenizer.from_pretrained(args.model_name_or_path)
+    # Hard code tokenizer path
+    enc = GPT2Tokenizer.from_pretrained('gpt2') # args.model_name_or_path)
     if args.scratch:
         config = GPT2Config(n_ctx=args.context_length, n_positions=args.context_length)
         model = GPT2LMHeadModel(config)
@@ -125,7 +128,7 @@ def main():
         model.apply(model.init_weights)
 
         try:
-            for _ in trange(int(args.num_train_epochs), desc="Epoch"):
+            for _ in tqdm.trange(int(args.num_train_epochs), desc="Epoch"):
                 tr_loss = 0
                 nb_tr_steps = 0
                 tqdm_bar = tqdm.tqdm(data_loader, desc="Training")
