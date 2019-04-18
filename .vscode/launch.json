@@ -5,6 +5,21 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Find LR",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/train_gpt2.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--output_dir", "/tmp/bflm",
+                "--train_dataset", "train_gpt2.py",
+                "--do_find_lr",
+                "--train_batch_size", "1",
+                "--context_length", "128",
+                "--scratch"
+            ]
+        },
+        {
             "name": "Python: Current File (Integrated Terminal)",
             "type": "python",
             "request": "launch",
