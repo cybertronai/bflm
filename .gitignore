@@ -125,3 +125,4 @@ dmypy.json
 /.idea/encodings.xml
 /.idea/modules.xml
 /.idea
+*.py#
