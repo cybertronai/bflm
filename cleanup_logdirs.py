@@ -28,7 +28,7 @@ def main():
         moved_logdir = f'{args.logdir_root}.old/{d}'
         dir_size = get_directory_size(logdir)
         
-        if dir_size < 100 or 'deleteme' in logdir:
+        if dir_size < 300 or 'deleteme' in logdir:
             print(f"Moving {logdir} to {moved_logdir}")
             if not args.dryrun:
                 os.system(f'mv {logdir} {moved_logdir}')

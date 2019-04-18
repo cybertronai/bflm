@@ -9,12 +9,13 @@ import time
 import torch
 import tqdm
 from tensorboardX import SummaryWriter
-from torch.utils.data import DataLoader, Dataset
-from tqdm import trange
+import matplotlib.pyplot as plt
 
+import pytorch_pretrained_bert
 from data_loader import get_data_loader
 from model_sampler import print_samples
-from pytorch_pretrained_bert import GPT2LMHeadModel, GPT2Tokenizer, OpenAIAdam, GPT2Config
+from pytorch_pretrained_bert import (GPT2Config, GPT2LMHeadModel,
+                                     GPT2Tokenizer, OpenAIAdam)
 
 
 def log_tb(tag, val):
@@ -24,11 +25,13 @@ def log_tb(tag, val):
 
 
 def checkpoint(model, args):
-    output_model_file = os.path.join(args.output_dir, "pytorch_model.bin")
+    output_model_file = os.path.join(args.output_dir, pytorch_pretrained_bert.modeling_gpt2.WEIGHTS_NAME)
     print('saving checkpoint to', output_model_file)
     # Only save the model itself
     model_to_save = model.module if hasattr(model, 'module') else model  
     torch.save(model_to_save.state_dict(), output_model_file)
+    with open(os.path.join(args.output_dir, pytorch_pretrained_bert.modeling_gpt2.CONFIG_NAME), 'w', encoding='utf-8') as f:
+        f.write(model_to_save.config.to_json_string())
 
 def current_timestamp() -> str:
     # timestamp format from https://github.com/tensorflow/tensorflow/blob/155b45698a40a12d4fef4701275ecce07c3bb01a/tensorflow/core/platform/default/logging.cc#L80
@@ -37,6 +40,90 @@ def current_timestamp() -> str:
     time_str = time.strftime('%Y-%m-%d_%H-%M-%S', time.localtime(current_seconds))
     return time_str
 
+def find_lr(data_loader, model, device, optimizer, init_value = 1e-8, final_value=10., beta = 0.98):
+    """Find a learning rate for this model using a batch.
+
+    Based on https://sgugger.github.io/how-do-you-find-a-good-learning-rate.html
+    """
+    num = min(1000, len(data_loader)-1)
+    mult = (final_value / init_value) ** (1/num)
+    lr = init_value
+    optimizer.param_groups[0]['lr'] = lr
+    avg_loss = 0.
+    best_loss = 0.
+    batch_num = 0
+    losses = []
+    lrs = []
+
+    model.train()
+    tqdm_bar = tqdm.tqdm(data_loader, desc="Finding LR")
+    for batch in tqdm_bar:
+        batch_num += 1
+        batch = batch.to(device)
+        loss = model(batch, lm_labels=batch)
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        #Compute the smoothed loss
+        avg_loss = beta * avg_loss + (1-beta) * loss.item()
+        smoothed_loss = avg_loss / (1 - beta**batch_num)
+       
+        #Stop if the loss is exploding
+        if batch_num > 1 and smoothed_loss > 4 * best_loss:
+            break
+        #Record the best loss
+        if smoothed_loss < best_loss or batch_num==1:
+            best_loss = smoothed_loss
+        #Store the values
+        losses.append(smoothed_loss)
+        lrs.append(lr)
+        tqdm_bar.desc = f"Loss: {smoothed_loss:.2e} lr: {optimizer.get_lr()[0]:.2e}"
+        #Update the lr for the next step
+        lr *= mult
+        optimizer.param_groups[0]['lr'] = lr
+
+    plt.xscale('log', basex=10)
+    plt.plot(lrs, losses)
+    plt.savefig('lr.png')
+    return lrs, losses
+
+def get_optimizer(model, args, data_loader, name='openai'):
+    # We use OpenAIAdam because that's what run_openai_gpt used
+    param_optimizer = list(model.named_parameters())
+    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+    optimizer_grouped_parameters = [
+        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        ]
+    num_train_optimization_steps = len(data_loader) * args.num_train_epochs
+
+    OPTIMIZER = 'openai'
+    if name == 'openai':
+        optimizer = OpenAIAdam(
+            optimizer_grouped_parameters,
+            lr=args.learning_rate,
+            warmup=args.warmup_proportion,
+            max_grad_norm=args.max_grad_norm,
+            weight_decay=args.weight_decay,
+            b2=.99, # instead of .999
+            t_total=num_train_optimization_steps)
+    else:
+        optimizer = torch.optim.Adam(
+            optimizer_grouped_parameters, lr=args.learning_rate,
+            betas=(0.9, 0.99), eps=1e-08, 
+            weight_decay=args.weight_decay, amsgrad=False)
+    return optimizer
+
+def get_model(args, device):
+    if args.scratch:
+        config = GPT2Config(n_ctx=args.context_length, n_positions=args.context_length)
+        model = GPT2LMHeadModel(config)
+    else:
+        model = GPT2LMHeadModel.from_pretrained(args.model_name_or_path)
+    #import torchsummary
+    #torchsummary.summary(model, (args.context_length, vocab_size), args.train_batch_size)
+    return model.to(device)
+
 def main():
     global global_example_count, event_writer
 
@@ -44,6 +131,7 @@ def main():
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--model_name_or_path', type=str, default='gpt2',
                         help='pretrained model name')
+    parser.add_argument("--do_find_lr", action='store_true', help="Whether to run lr search.")
     parser.add_argument("--do_train", action='store_true', help="Whether to run training.")
     parser.add_argument("--do_eval", action='store_true', help="Whether to run eval on the dev set.")
     parser.add_argument("--output_dir", default=None, type=str, required=True,
@@ -51,7 +139,7 @@ def main():
     parser.add_argument('--train_dataset', type=str, default='')
     parser.add_argument('--eval_dataset', type=str, default='')
     parser.add_argument('--context_length', type=int, default=1024)
-    parser.add_argument('--num_train_epochs', type=int, default=3)
+    parser.add_argument('--num_train_epochs', type=int, default=10)
     parser.add_argument('--train_batch_size', type=int, default=16)
     parser.add_argument('--eval_batch_size', type=int, default=16)
     parser.add_argument('--max_grad_norm', type=int, default=1)
@@ -67,9 +155,10 @@ def main():
     parser.add_argument('--logdir',type=str, default='/tmp/runs', help="location of logging directory")
     parser.add_argument('--min_file_len', type=int, help="When loading dataset, throw out files with fewer than this many characters")
     parser.add_argument('--max_file_len', type=int, help="When loading dataset, throw out files with greater than this many characters")
+    parser.add_argument('--scratch', action='store_true', help='Don\'t start with pretrained model, train from scratch')
 
     args = parser.parse_args()
-    assert args.do_train or args.do_eval, "Specify at least one of do_train or do_eval"
+    assert args.do_train or args.do_eval or args.do_find_lr, "Specify at least one of do_train or do_eval or do_find_lr"
     args.logdir = f'{args.logdir}/{args.run_name}-{current_timestamp()}'
     os.system(f'mkdir -p {args.logdir}')
 
@@ -78,54 +167,36 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     args.device = device
 
-    enc = GPT2Tokenizer.from_pretrained(args.model_name_or_path)
-    model = GPT2LMHeadModel.from_pretrained(args.model_name_or_path)
-    # Uncomment below for bigger context length
-    #config = GPT2Config(n_ctx=1025, n_positions=1025)
-    #model = GPT2LMHeadModel(config)
-    model.to(device)
+    # Hard code tokenizer path
+    enc = GPT2Tokenizer.from_pretrained('gpt2') # args.model_name_or_path)
+    model = get_model(args, device)
 
-    # setup TensorBoard logging
-    global_example_count = 0
-    print(f"Logging to {args.logdir}")
-    event_writer = SummaryWriter(args.logdir)
-    log_tb("first", time.time())
+    if args.do_find_lr:
+        data_loader = get_data_loader(args.train_dataset, enc, args.train_batch_size, args)
+        optimizer = get_optimizer(model, args, data_loader)
+        find_lr(data_loader, model, device, optimizer)
+        # Restart from checkpoint.
+        model = get_model(args, device)
 
     if args.do_train:
+        # setup TensorBoard logging
+        global_example_count = 0
+        print(f"Logging to {args.logdir}")
+        event_writer = SummaryWriter(args.logdir)
+        log_tb("first", time.time())
+        event_writer.add_text('args', str(args))
         data_loader = get_data_loader(args.train_dataset, enc, args.train_batch_size, args)
-
-        # ## Prep optimizer
-        # We use OpenAIAdam because that's what run_openai_gpt used
-        # Prepare optimizer
-        param_optimizer = list(model.named_parameters())
-        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-        optimizer_grouped_parameters = [
-            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-            ]
-        num_train_optimization_steps = len(data_loader) * args.num_train_epochs
-
-        optimizer = OpenAIAdam(optimizer_grouped_parameters,
-                            lr=args.learning_rate,
-                            warmup=args.warmup_proportion,
-                            max_grad_norm=args.max_grad_norm,
-                            weight_decay=args.weight_decay,
-                            t_total=num_train_optimization_steps)
-
+        optimizer = get_optimizer(model, args, data_loader)
 
         # ## Train loop
         # Based on `run_openai_gpt.py`
         nb_tr_steps, tr_loss, exp_average_loss = 0, 0, None
-
-        # Reset all model weights so we can train from scratch.
-        model.apply(model.init_weights)
-
         try:
-            for _ in trange(int(args.num_train_epochs), desc="Epoch"):
+            for _ in tqdm.trange(int(args.num_train_epochs), desc="Epoch"):
                 tr_loss = 0
                 nb_tr_steps = 0
                 tqdm_bar = tqdm.tqdm(data_loader, desc="Training")
-                for step, batch in enumerate(tqdm_bar):
+                for batch in tqdm_bar:
                     model.train()
                     batch = batch.to(device)
                     loss = model(batch, lm_labels=batch)
@@ -159,7 +230,7 @@ def main():
         nb_steps, eval_loss, exp_average_loss = 0, 0, None
         with torch.no_grad():
             tqdm_bar = tqdm.tqdm(data_loader, desc="Eval")
-            for step, batch in enumerate(tqdm_bar):
+            for batch in tqdm_bar:
                 # Put model in training mode.
                 batch = batch.to(device)
                 # input_ids, position_ids=None, token_type_ids=None, lm_labels=None, past=None
@@ -172,7 +243,7 @@ def main():
                 log_tb('loss', loss.item())
                 log_tb('ppl', loss.exp().item())
                 global_example_count+=args.train_batch_size
-        print('Final ppl:', math.exp(eval_loss / nb_steps))
+        print(f'Final loss: {(eval_loss / nb_steps):.2e} ppl: {math.exp(eval_loss / nb_steps):.2e}')
 
 
 
