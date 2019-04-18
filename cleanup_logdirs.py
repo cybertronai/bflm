@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Script to move tiny or "deleteme" logdirs out of main logdir root
+# Script to move tiny or "deleteme" logdirs out of main logdir roots
 #
 
 import os
@@ -21,9 +21,8 @@ def get_directory_size(start_path='.'):
     return total_size
 
 
-def main():
-    os.system(f'mkdir -p {args.logdir_root}.old')
-    for d in os.listdir(args.logdir_root):
+def cleanup_logdir_root(root):
+    for d in os.listdir(root):
         logdir = f'{args.logdir_root}/{d}'
         moved_logdir = f'{args.logdir_root}.old/{d}'
         dir_size = get_directory_size(logdir)
@@ -32,6 +31,11 @@ def main():
             print(f"Moving {logdir} to {moved_logdir}")
             if not args.dryrun:
                 os.system(f'mv {logdir} {moved_logdir}')
+
+def main():
+    os.system(f'mkdir -p {args.logdir_root}.old')
+    cleanup_logdir_root(args.logdir_root)
+    cleanup_logdir_root(args.logdir_root+'.new')
 
 
 if __name__=='__main__':
