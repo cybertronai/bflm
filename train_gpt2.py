@@ -112,6 +112,7 @@ def get_optimizer(model, args, data_loader):
             optimizer_grouped_parameters, lr=args.learning_rate,
             betas=(0.9, 0.99), eps=1e-08, 
             weight_decay=args.weight_decay, amsgrad=False)
+        optimizer.get_lr = lambda : [args.learning_rate]
     return optimizer
 
 def get_model(args, device):
