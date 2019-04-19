@@ -80,7 +80,8 @@ def find_lr(data_loader, model, device, optimizer, init_value = 1e-8, final_valu
         tqdm_bar.desc = f"Loss: {smoothed_loss:.2e} lr: {optimizer.get_lr()[0]:.2e}"
         #Update the lr for the next step
         lr *= mult
-        optimizer.param_groups[0]['lr'] = lr
+        for p in optimizer.param_groups:
+            p['lr'] = lr
 
     plt.xscale('log', basex=10)
     plt.plot(lrs, losses)
@@ -112,7 +113,7 @@ def get_optimizer(model, args, data_loader):
             optimizer_grouped_parameters, lr=args.learning_rate,
             betas=(0.9, 0.99), eps=1e-08, 
             weight_decay=args.weight_decay, amsgrad=False)
-        optimizer.get_lr = lambda : [args.learning_rate]
+        optimizer.get_lr = lambda : [p['lr'] for p in optimizer.param_groups]
     return optimizer
 
 def get_model(args, device):
