@@ -80,14 +80,15 @@ def find_lr(data_loader, model, device, optimizer, init_value = 1e-8, final_valu
         tqdm_bar.desc = f"Loss: {smoothed_loss:.2e} lr: {optimizer.get_lr()[0]:.2e}"
         #Update the lr for the next step
         lr *= mult
-        optimizer.param_groups[0]['lr'] = lr
+        for p in optimizer.param_groups:
+            p['lr'] = lr
 
     plt.xscale('log', basex=10)
     plt.plot(lrs, losses)
     plt.savefig('lr.png')
     return lrs, losses
 
-def get_optimizer(model, args, data_loader, name='openai'):
+def get_optimizer(model, args, data_loader):
     # We use OpenAIAdam because that's what run_openai_gpt used
     param_optimizer = list(model.named_parameters())
     no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
@@ -97,14 +98,14 @@ def get_optimizer(model, args, data_loader, name='openai'):
         ]
     num_train_optimization_steps = len(data_loader) * args.num_train_epochs
 
-    OPTIMIZER = 'openai'
-    if name == 'openai':
+    if args.optimizer == 'openai':
         optimizer = OpenAIAdam(
             optimizer_grouped_parameters,
             lr=args.learning_rate,
             warmup=args.warmup_proportion,
             max_grad_norm=args.max_grad_norm,
             weight_decay=args.weight_decay,
+            schedule=args.lr_schedule,
             b2=.99, # instead of .999
             t_total=num_train_optimization_steps)
     else:
@@ -112,6 +113,7 @@ def get_optimizer(model, args, data_loader, name='openai'):
             optimizer_grouped_parameters, lr=args.learning_rate,
             betas=(0.9, 0.99), eps=1e-08, 
             weight_decay=args.weight_decay, amsgrad=False)
+        optimizer.get_lr = lambda : [p['lr'] for p in optimizer.param_groups]
     return optimizer
 
 def get_model(args, device):
@@ -145,6 +147,7 @@ def main():
     parser.add_argument('--max_grad_norm', type=int, default=1)
     parser.add_argument('--learning_rate', type=float, default=1e-2)
     parser.add_argument('--warmup_proportion', type=float, default=0.002)
+    parser.add_argument('--optimizer', type=str, default='openai', help='Which optimizer to use: {openai, adam}')
     parser.add_argument('--lr_schedule', type=str, default='warmup_linear')
     parser.add_argument('--weight_decay', type=float, default=0.01)
     parser.add_argument('--n_valid', type=int, default=374)

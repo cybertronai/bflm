@@ -16,7 +16,8 @@
                 "--do_find_lr",
                 "--train_batch_size", "1",
                 "--context_length", "128",
-                "--scratch"
+                "--scratch",
+                "--optimizer", "adam"
             ]
         },
         {
