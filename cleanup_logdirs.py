@@ -23,8 +23,8 @@ def get_directory_size(start_path='.'):
 
 def cleanup_logdir_root(root):
     for d in os.listdir(root):
-        logdir = f'{args.logdir_root}/{d}'
-        moved_logdir = f'{args.logdir_root}.old/{d}'
+        logdir = f'{root}/{d}'
+        moved_logdir = f'{root}.old/{d}'
         dir_size = get_directory_size(logdir)
         
         if dir_size < 300 or 'deleteme' in logdir:
