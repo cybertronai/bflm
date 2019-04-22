@@ -9,6 +9,7 @@ import argparse
 parser = argparse.ArgumentParser(description='')
 parser.add_argument('--logdir_root', type=str, default='/ncluster/runs', help="where logs and events go")
 parser.add_argument('--dryrun', help="only print actions, don't don anything", action='store_true')
+parser.add_argument('--verbose', help="only print actions, don't don anything", action='store_true')
 args = parser.parse_args()
 
 
@@ -26,8 +27,11 @@ def cleanup_logdir_root(root):
         logdir = f'{root}/{d}'
         moved_logdir = f'{root}.old/{d}'
         dir_size = get_directory_size(logdir)
-        
-        if dir_size < 300 or 'deleteme' in logdir:
+
+        if args.verbose:
+          print(f'{logdir} with size {dir_size}')
+
+        if dir_size < 3000 or 'deleteme' in logdir:
             print(f"Moving {logdir} to {moved_logdir}")
             if not args.dryrun:
                 os.system(f'mv {logdir} {moved_logdir}')
