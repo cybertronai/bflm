@@ -84,6 +84,7 @@ def find_lr(data_loader, model, device, optimizer, init_value = 1e-8, final_valu
             p['lr'] = lr
 
     plt.xscale('log', basex=10)
+    plt.title(str(args))
     plt.plot(lrs, losses)
     plt.savefig('lr.png')
     return lrs, losses
