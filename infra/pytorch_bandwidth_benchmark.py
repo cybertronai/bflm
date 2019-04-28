@@ -17,7 +17,6 @@ import torch.nn as nn
 from torch.nn.parallel import DistributedDataParallel
 
 
-
 import numpy as np
 
 import ncluster
@@ -29,21 +28,34 @@ import util
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--name', type=str, default='bandwidth_test')
+parser.add_argument('--seed', type=int, default=1)
 
 parser.add_argument("--aws", action="store_true", help="enable to run on AWS")
 parser.add_argument('--instance_type', type=str, default="p3.2xlarge")
 parser.add_argument('--machines', type=int, default=2)
 parser.add_argument('--nproc_per_node', type=int, default=8)
-parser.add_argument('--image_name', type=str, default='reference01')
+
+#parser.add_argument('--image_name', type=str, default='reference01')
+#parser.add_argument('--conda_env', type=str, default='pytorch_p36')
+
+#parser.add_argument('--image_name', type=str, default='reference02')
+parser.add_argument('--conda_env', type=str, default='pytorch_april')
+
+parser.add_argument('--image_name', type=str, default='reference03')
+#parser.add_argument('--conda_env', type=str, default='pytorch_april_nccl237')
+
 parser.add_argument('--nospot', action='store_true',
                     help='use regular instead of spot instances')
 
-parser.add_argument('--num_layers', type=int, default=10)
-# parser.add_argument('--layer_size_mb', type=int, default=10)
-parser.add_argument('--iters', type=int, default=10,
+parser.add_argument('--iters', type=int, default=20,
                     help='how many iterations')
 parser.add_argument('--fp16', action='store_true')
 parser.add_argument('--skip_setup', action='store_true')
+
+
+parser.add_argument('--num_rings', type=int, default=16)
+parser.add_argument('--num_layers', type=int, default=16)
+parser.add_argument('--bucket_cap', type=int, default=25)
 
 # worker params
 parser.add_argument('--logdir', type=str, default='/tmp')
@@ -61,8 +73,9 @@ args = parser.parse_args()
 
 def _get_nccl_params():
     params = f'NCCL_DEBUG=VERSION '
+    #    params = f'NCCL_DEBUG=INFO '
     if args.machines > 1:
-        params += f'NCCL_MIN_NRINGS=16 '
+        params += f'NCCL_MIN_NRINGS={args.num_rings} '
     if aws_util.instance_supports_100gbps_network(args.instance_type):
         params += f'NCCL_SOCKET_IFNAME=ens5 '
 
@@ -106,7 +119,7 @@ def launcher():
     job.upload('util.py')
     worker_script_fn = os.path.basename(__file__)  # remote location
 
-    job.run('killall python || echo fail && source activate pytorch_p36')
+    job.run(f'killall -9 python || echo fail && source activate {args.conda_env}')
 
     for i, task in enumerate(job.tasks):
         dist_params = dist_params0 + f'--node_rank={i} '
@@ -118,77 +131,80 @@ def launcher():
     print(f"Logging to {job.logdir}")
 
 
-def test_p2p():
-    import torch
-    import torch.distributed as dist
-    import numpy as np
+# def test_p2p():
+#     import torch
+#     import torch.distributed as dist
+#     import numpy as np
 
-    log = util.FileLogger(args.logdir + f'/worker-{util.get_global_rank()}',
-                          mirror=(args.local_rank == 0))
+#     # TODO: need layer_size_mb arg
+#     # parser.add_argument('--layer_size_mb', type=int, default=10)
+    
+#     log = util.FileLogger(args.logdir + f'/worker-{util.get_global_rank()}',
+#                           mirror=(args.local_rank == 0))
 
-    os.environ['MASTER_ADDR'] = str(args.master_addr)
-    os.environ['MASTER_PORT'] = str(args.master_port)
-    # Use TCP backend. Gloo needs nightly, where it currently fails with
-    #     dist.init_process_group('gloo', rank=args.rank,
-    #   AttributeError: module 'torch.distributed' has no attribute 'init_process_group'
+#     os.environ['MASTER_ADDR'] = str(args.master_addr)
+#     os.environ['MASTER_PORT'] = str(args.master_port)
+#     # Use TCP backend. Gloo needs nightly, where it currently fails with
+#     #     dist.init_process_group('gloo', rank=args.rank,
+#     #   AttributeError: module 'torch.distributed' has no attribute 'init_process_group'
 
-    log("Initializing distributed pytorch")
-    # nccl backend does not support send
-    dist.init_process_group('gloo', rank=util.get_global_rank(),
-                            world_size=util.get_world_size())
+#     log("Initializing distributed pytorch")
+#     # nccl backend does not support send
+#     dist.init_process_group('gloo', rank=util.get_global_rank(),
+#                             world_size=util.get_world_size())
 
-    rank = util.get_global_rank()
-    tensor = torch.ones(args.layer_size_mb * 250 * 1000) * (rank + 1)
-    time_list = []
-    for i in range(args.iters):
-        start_time = time.perf_counter()
-        if args.local_rank == 0:
-            dist.send(tensor=tensor, dst=1)
-        elif args.local_rank == 1:
-            dist.recv(tensor=tensor, src=0)
+#     rank = util.get_global_rank()
+#     tensor = torch.ones(args.layer_size_mb * 250 * 1000) * (rank + 1)
+#     time_list = []
+#     for i in range(args.iters):
+#         start_time = time.perf_counter()
+#         if args.local_rank == 0:
+#             dist.send(tensor=tensor, dst=1)
+#         elif args.local_rank == 1:
+#             dist.recv(tensor=tensor, src=0)
 
-        elapsed_time_ms = (time.perf_counter() - start_time) * 1000
-        time_list.append(elapsed_time_ms)
+#         elapsed_time_ms = (time.perf_counter() - start_time) * 1000
+#         time_list.append(elapsed_time_ms)
 
-        #        rate = args.size_mb/(elapsed_time_ms/1000)
-        rate = 0
+#         #        rate = args.size_mb/(elapsed_time_ms/1000)
+#         rate = 0
 
-        log('%03d/%d added %d MBs in %.1f ms: %.2f MB/second' % (
-        i, args.iters, args.layer_size_mb, elapsed_time_ms, rate))
+#         log('%03d/%d added %d MBs in %.1f ms: %.2f MB/second' % (
+#         i, args.iters, args.layer_size_mb, elapsed_time_ms, rate))
 
-    min_time = np.min(time_list)
-    median = np.median(time_list)
-    log(f"min: {min_time:8.2f}, median: {median:8.2f}, mean: {np.mean(time_list):8.2f}")
+#     min_time = np.min(time_list)
+#     median = np.median(time_list)
+#     log(f"min: {min_time:8.2f}, median: {median:8.2f}, mean: {np.mean(time_list):8.2f}")
 
 
 class SimpleNet(nn.Module):
-    def __init__(self, num_layers, layer_dim):
+    def __init__(self, num_layers, dim):
         super(SimpleNet, self).__init__()
         self.layers = []
+        
         for i in range(num_layers):
-            self.layers.append(nn.Linear(layer_dim, layer_dim))
+            param0 = torch.normal(torch.zeros((dim, dim)), 0.001)
+            param = nn.Parameter(param0)
+            self.layers.append(param)
+            setattr(self, 'W'+str(i), param)
 
     def forward(self, x):
         for layer in self.layers:
-            x = layer(x)
-        return (x * x).sum()
+            x = x + layer
+        return x
 
-
+log = None
 def test_optimize():
+    global log
+
+    recv_bytes, transmit_bytes = util.network_bytes()
+    
     device = 'cuda'
     fp16 = True
 
-    # args.layer_size_mb*250*1000
-    # 10 layers, 100MB per layer in fp32
-    log = util.FileLogger(args.logdir + f'/worker-{util.get_global_rank()}', mirror=(args.local_rank == 0))
-
     dim = 2 ** 12  # multiple of 8, about 67MB matrix in fp32
-    num_layers = 10
 
-
-    #    model = SimpleNet(num_layers=num_layers, layer_dim=dim)
-    layers = list(nn.Linear(dim, dim) for _ in range(num_layers))
-    model = nn.Sequential(*layers)
+    model = SimpleNet(args.num_layers, dim)
     model = model.to(device)
     if fp16:
         model = model.half()
@@ -196,53 +212,75 @@ def test_optimize():
     else:
         bytes_per_number = 4
 
-    size_mb = (dim ** 2) * bytes_per_number / 1e6
+    gradient_size = args.num_layers * (dim * dim) * bytes_per_number
+    size_mb = gradient_size / 1e6
 
     log('initializing process group')
     dist.init_process_group(backend='nccl',
                             init_method='env://',
                             world_size=util.get_world_size())
 
-
     log('calling DDP')
     model = DistributedDataParallel(model,
                                     device_ids=[args.local_rank],
                                     output_device=args.local_rank)
-    optimizer = optim.SGD(model.parameters(), lr=0.001)
+    optimizer = optim.SGD(model.parameters(), lr=0.01)
 
-    x = torch.ones((dim, dim))
+    x = torch.eye(dim)
+    x = x.to(device)
+    if fp16:
+        x = x.half()
     time_list = []
+    start_time = time.perf_counter()
+    start_time0 = start_time
     for i in range(args.iters):
-        start_time = time.perf_counter()
         optimizer.zero_grad()
 
         output = model(x)
-        loss = (output * output).mean()
+
+        def sqr(a): return a*a
+        loss = sqr(output-x).sum()
         loss.backward()
         optimizer.step()
 
+        torch.cuda.synchronize()
         elapsed_time_sec = (time.perf_counter() - start_time)
+        start_time = time.perf_counter()
+        
         elapsed_time_ms = elapsed_time_sec * 1000
         time_list.append(elapsed_time_ms)
         rate = size_mb / elapsed_time_sec
 
         log('%03d/%d added %d MBs in %.1f ms: %.2f MB/second %.1f' % (
-        i, args.iters, args.layer_size_mb, elapsed_time_ms,
-        rate, loss))
+            i, args.iters, size_mb, elapsed_time_ms, rate, loss))
 
+    del time_list[0]   # first measurement is off because of syncing
     min_time = np.min(time_list)
     median = np.median(time_list)
     log(f"min: {min_time:8.2f}, median: {median:8.2f}, mean: {np.mean(time_list):8.2f}")
 
+    recv_bytes1, transmit_bytes1 = util.network_bytes()
+    log(f"Received {(recv_bytes1-recv_bytes)/1e9:.1f}, transmitted {(transmit_bytes1-transmit_bytes)/1e9:.1f}")
+    log(f"predicted {gradient_size*args.iters/1e9:.1f}")
 
-def test_end2end():
-    pass
+    elapsed_time = time.perf_counter() - start_time0
+    log(f"average bw: {(recv_bytes1-recv_bytes)*8/elapsed_time/1e9:.1f} Gbps")
+
 
 
 def main():
+    global log
     if args.role == "launcher":
         launcher()
     elif args.role == "worker":
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(args.seed)
+
+        log = util.FileLogger(args.logdir + f'/worker-{util.get_global_rank()}', mirror=(args.local_rank == 0))
+
+        torch.cuda.set_device(args.local_rank)
         #      test_p2p()
         test_optimize()
     else:
