@@ -39,9 +39,8 @@ def main():
         assert False, 'unsupported instance '+args.instance_type
 
     # naming: nt-{p3/pdn}-{# machines}-{ring/all2all/etc}
-    name = f"{args.name}-{instance_short_name}-{args.machines}-default"
-    job = ncluster.make_job(name=name,
-                            run_name=name,
+    #name = f"{args.name}-{instance_short_name}-{args.machines}-default"
+    job = ncluster.make_job(name=args.name,
                             num_tasks=args.machines,
                             image_name=args.image_name,
                             instance_type=args.instance_type,
@@ -49,31 +48,16 @@ def main():
     print(f"Logging to {job.logdir}")
     tasks = job.tasks
 
-    if args.multiproc:
+    for i in range(args.num_procs):
+        ip = tasks[0].ip
+        port = 6006+i
+        tag = f"s{i}"
+        tasks[0].switch_window(i)
+        tasks[0].run(f'sudo iperf3 -s -p {port}', non_blocking=True)
+        tasks[1].switch_window(i)
+        tasks[1].run(f'sudo iperf3 -T {tag} -c {ip} -P {args.flows_per_proc} -i 1 -t {args.duration_sec} -V -p {port}',
+                     non_blocking=True)
 
-        for i in range(args.num_procs):
-            ip = tasks[0].ip
-            port = 6006+i
-            tag = f"s{i}"
-            tasks[0].switch_window(i)
-            tasks[0].run(f'sudo iperf3 -s -p {port}', non_blocking=True)
-            tasks[1].switch_window(i)
-            tasks[1].run(f'sudo iperf3 -T {tag} -c {ip} -P {args.flows_per_proc} -i 1 -t {args.duration_sec} -V -p {port}',
-                         non_blocking=True)
-        return
-
-    job.run('export NCCL_SOCKET_IFNAME=ens5')  # tip from cakarak@amazon.com
-    job.run('pip install tensorflow')
-    job.run('pip install tensorboardX')
-    job.run('sudo apt install -y iperf3')
-
-    tasks[0].run(f'sudo iperf3 -s -p 6006', non_blocking=True)
-    tasks[1].run(f'sudo iperf3 -c {tasks[0].ip} -P 10 -i 1 -t 60 -V -p 6006',
-                 non_blocking=True)
-
-    # for i, task in enumerate(job.tasks):
-    #    pass
-    # 
 
 
 if __name__ == '__main__':
