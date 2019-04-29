@@ -36,20 +36,22 @@ parser.add_argument('--machines', type=int, default=2)
 parser.add_argument('--nproc_per_node', type=int, default=8)
 
 #parser.add_argument('--image_name', type=str, default='reference01')
-#parser.add_argument('--conda_env', type=str, default='pytorch_p36')
+parser.add_argument('--conda_env', type=str, default='pytorch_p36')
 
-#parser.add_argument('--image_name', type=str, default='reference02')
-parser.add_argument('--conda_env', type=str, default='pytorch_april')
+# parser.add_argument('--image_name', type=str, default='reference02')
+# parser.add_argument('--conda_env', type=str, default='pytorch_april')
 
 parser.add_argument('--image_name', type=str, default='reference03')
 #parser.add_argument('--conda_env', type=str, default='pytorch_april_nccl237')
+
+parser.add_argument('--method', type=str, default='optimize')
 
 parser.add_argument('--nospot', action='store_true',
                     help='use regular instead of spot instances')
 
 parser.add_argument('--iters', type=int, default=20,
                     help='how many iterations')
-parser.add_argument('--fp16', action='store_true')
+#parser.add_argument('--fp16', action='store_true')
 parser.add_argument('--skip_setup', action='store_true')
 
 
@@ -70,12 +72,13 @@ parser.add_argument('--master_port', type=int, default=-1,
                     help='port of master node')
 args = parser.parse_args()
 
+fp16 = True
 
 def _get_nccl_params():
-    params = f'NCCL_DEBUG=VERSION '
-    #    params = f'NCCL_DEBUG=INFO '
+    #params = f'NCCL_DEBUG=VERSION '
+    params = f'NCCL_DEBUG=INFO '
     if args.machines > 1:
-        params += f'NCCL_MIN_NRINGS={args.num_rings} '
+        params += f'NCCL_MIN_NRINGS={args.num_rings} NCCL_MAX_NRINGS={args.num_rings} '
     if aws_util.instance_supports_100gbps_network(args.instance_type):
         params += f'NCCL_SOCKET_IFNAME=ens5 '
 
@@ -200,7 +203,6 @@ def test_optimize():
     recv_bytes, transmit_bytes = util.network_bytes()
     
     device = 'cuda'
-    fp16 = True
 
     dim = 2 ** 12  # multiple of 8, about 67MB matrix in fp32
 
@@ -266,6 +268,64 @@ def test_optimize():
     elapsed_time = time.perf_counter() - start_time0
     log(f"average bw: {(recv_bytes1-recv_bytes)*8/elapsed_time/1e9:.1f} Gbps")
 
+def test_allreduce():
+    global log
+
+    recv_bytes, transmit_bytes = util.network_bytes()
+    
+    device = 'cuda'
+
+    dim = 2 ** 12  # multiple of 8, about 67MB matrix in fp32
+
+    if fp16:
+        bytes_per_number = 2
+    else:
+        bytes_per_number = 4
+
+    gradient_size = args.num_layers * (dim * dim) * bytes_per_number
+    size_mb = gradient_size / 1e6
+
+    log('initializing process group')
+    dist.init_process_group(backend='nccl',
+                            init_method='env://',
+                            world_size=util.get_world_size())
+
+    log('calling DDP')
+    xs = [torch.ones((dim, dim)) for i in range(args.num_layers)]
+    xs = [x.to(device) for x in xs]
+    if fp16:
+        xs = [x.half() for x in xs]
+    time_list = []
+    start_time = time.perf_counter()
+    start_time0 = start_time
+    for i in range(args.iters):
+        
+        [dist.all_reduce(x, async_op=True) for x in xs]
+        
+        dist.barrier()
+        torch.cuda.synchronize()
+        elapsed_time_sec = (time.perf_counter() - start_time)
+        start_time = time.perf_counter()
+        
+        elapsed_time_ms = elapsed_time_sec * 1000
+        time_list.append(elapsed_time_ms)
+        rate = size_mb / elapsed_time_sec
+
+        new_result = xs[0]
+        log('%03d/%d added %d MBs in %.1f ms: %.2f MB/second %.1f' % (
+            i, args.iters, size_mb, elapsed_time_ms, rate, new_result[0,0]))
+
+    del time_list[0]   # first measurement is off because of syncing
+    min_time = np.min(time_list)
+    median = np.median(time_list)
+    log(f"min: {min_time:8.2f}, median: {median:8.2f}, mean: {np.mean(time_list):8.2f}")
+
+    recv_bytes1, transmit_bytes1 = util.network_bytes()
+    log(f"Received {(recv_bytes1-recv_bytes)/1e9:.1f}, transmitted {(transmit_bytes1-transmit_bytes)/1e9:.1f}")
+    log(f"predicted {gradient_size*args.iters/1e9:.1f}")
+
+    elapsed_time = time.perf_counter() - start_time0
+    log(f"average bw: {(recv_bytes1-recv_bytes)*8/elapsed_time/1e9:.1f} Gbps")
 
 
 def main():
@@ -282,7 +342,12 @@ def main():
 
         torch.cuda.set_device(args.local_rank)
         #      test_p2p()
-        test_optimize()
+        if args.method == 'optimize':
+            test_optimize()
+        elif args.method == 'allreduce':
+            test_allreduce()
+        else:
+            assert False, 'unknown arg'
     else:
         assert False, "Unknown role " + args.role
 
