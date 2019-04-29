@@ -1,8 +1,17 @@
 #!/usr/bin/env python
 # python launch_network_test.py --instance_type=p3dn.24xlarge
 #
-# Local gloo 1000MB tensors p2p:
-# min:   204.96, median:   308.84, mean:   322.97
+# 16 Rings, 8 Processes, 151-153, 53 Gbps, received 20.9
+# 16 rings, 8 processes, 173-178, 46 Gbps, received 20.9
+# 171-177ms, 39.8 Gbps
+# with nccl 2.4.6 12 Gbps
+# python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=8 --num_rings=16 --skip_setup
+
+# 185ms, average bw=28
+# python pytorch_bandwidth_benchmark.py --role=launcher --method=allreduce --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=8 --num_rings=16 --skip_setup
+
+# 170ms, average bw=45
+# python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=8 --num_rings=16 --skip_setup
 #
 
 import argparse
