@@ -1,0 +1,105 @@
+# one machine, 1 GPU, 6 - 11 ms per step, 49 GB/s
+# one machine, 2 GPU, 38 - 39 ms per step, 13.7 GB/s
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=1 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=2 --skip_setup
+
+# one machine, 8 GPU, 20-20 ms per step
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=1 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=8 --skip_setup
+
+
+# simpler allreduce benchmark, 8 GPU, 9-9ms per step
+python pytorch_bandwidth_benchmark.py --method=allreduce  --role=launcher --machines=1 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=8 --skip_setup
+
+
+# two machines, 1 gpu, 148 - 150 ms , 3.6 GB/s, 26.9 Gbps reported
+# received 54.2, transmitted 54.7, predicted 53.7
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=1 --skip_setup
+
+
+# 8 rings, averge bw = 25.3
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=1 --num_rings=8
+ --skip_setup
+
+
+# 1 ring, bw=9.4
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=1 --num_rings=1 --skip_setup
+
+# 2 rings, bw=18.5
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=1 --num_rings=4 --skip_setup
+
+# 3 rings, bw=14.0
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=1 --num_rings=3 --skip_setup
+
+
+# 4 rings, bw=28.2
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=1 --num_rings=4 --skip_setup
+
+# 5 rings, bw=27.8
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=1 --num_rings=5
+
+# 6 rings, bw=27.5
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=1 --num_rings=6
+ --skip_setup
+
+# 32 rings, bw=28.1
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=1 --num_rings=32 --skip_setup
+
+# 64 rings, bw=27.8
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=1 --num_rings=64 --skip_setup
+
+# 128 rings, bw=28.1
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=1 --num_rings=128 --skip_setup
+
+# 256 rings, bw=26.3
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=1 --num_rings=256 --skip_setup
+
+# 2560 rings, bw=25.7 Gbps
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=1 --num_rings=2560 --skip_setup
+
+# 2 million rings, bw=27.9 Gbps
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=1 --num_rings=2560000 --skip_setup
+
+
+# 16 Rings, 8 Processes, 151-153, 53 Gbps, received 20.9
+# 16 rings, 8 processes, 173-178, 46 Gbps, received 20.9
+# 171-177ms, 39.8 Gbps
+# with nccl 2.4.6 12 Gbps
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=8 --num_rings=16 --skip_setup
+
+Received 20.3, transmitted 20.9 in 3.6 seconds
+predicted 10.7
+average bw: 45.4 Gbps
+
+
+# 171ms, average bw=44.8 Gbps
+python pytorch_bandwidth_benchmark.py --role=launcher --method=allreduce --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=8 --num_rings=16 --skip_setup
+
+
+# 170ms, average bw=45
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=8 --num_rings=16 --skip_setup
+
+
+# 1/2 layers 77-81, 45 Gbps
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=8 --num_rings=16 --num_layers=8 --skip_setup
+
+# 2x layers, 304-308, 50 Gbps
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=8 --num_rings=16 --num_layers=32
+
+
+# 16 rings, 4 processes, 142-146, 48.4 received 19.5
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=4 --num_rings=16 --skip_setup
+
+# 16 rings, 2 processes, 130-131, 48 Gbps, received 16.8
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=2 --num_rings=16 --skip_setup
+
+# 16 rings, 1 processes, 108-109, 39 Gbps, recieved 11.4
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=2 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=1 --num_rings=16 --skip_setup
+
+# 440-441, 38.5 Gbps
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=8 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=8
+
+# 353-360ms, 46.1 Gbps, received 42 GB
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=8 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=8  --method=allreduce
+
+# 953-985, 4.3 Gbps, received 10 GB
+python pytorch_bandwidth_benchmark.py --role=launcher --machines=8 --aws --instance_type=p3dn.24xlarge --nospot --nproc_per_node=8  --method=allreduce --use_latest_nccl
+
