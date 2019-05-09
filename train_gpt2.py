@@ -175,6 +175,9 @@ def main():
     enc = GPT2Tokenizer.from_pretrained('gpt2') # args.model_name_or_path)
     model = get_model(args, device)
 
+    event_writer = SummaryWriter(args.logdir)
+    global_example_count = 0
+
     if args.do_find_lr:
         data_loader = get_data_loader(args.train_dataset, enc, args.train_batch_size, args)
         optimizer = get_optimizer(model, args, data_loader)
@@ -184,9 +187,7 @@ def main():
 
     if args.do_train:
         # setup TensorBoard logging
-        global_example_count = 0
         print(f"Logging to {args.logdir}")
-        event_writer = SummaryWriter(args.logdir)
         log_tb("first", time.time())
         event_writer.add_text('args', str(args))
         data_loader = get_data_loader(args.train_dataset, enc, args.train_batch_size, args)
