@@ -18,21 +18,21 @@ parser.add_argument('--nospot', action='store_true',
                     help='use regular instead of spot instances')
 parser.add_argument('--multiproc', action='store_true')
 parser.add_argument('--flows_per_proc', type=int, default=10)
-parser.add_argument('--duration_sec', type=int, default=600)
+parser.add_argument('--duration_sec', type=int, default=60)
 parser.add_argument('--num_procs', type=int, default=8)
+parser.add_argument('--launch', action='store_true')
+
+# worker params
+parser.add_argument('--logdir', type=str, default='/tmp/iperf')
+
 args = parser.parse_args()
 
 
-def main():
-    if args.instance_type == 'p3.16xlarge':
-        instance_short_name = 'p3'
-    elif args.instance_type == 'p3dn.24xlarge':
-        instance_short_name = 'p4'
-    elif args.instance_type == 'c5.18xlarge':
-        instance_short_name = 'c5'
-    else:
-        assert False, 'unsupported instance '+args.instance_type
+def worker():
+    # TODO(y): worker/launcher refactoring is needed to get sanity checks like util.network_bytes, but blocked on https://github.com/yaroslavvb/ncluster/issues/19
+    assert False, "use --launch arg"
 
+def launcher():
     job = ncluster.make_job(name=args.name,
                             num_tasks=args.machines,
                             image_name=args.image_name,
@@ -48,10 +48,11 @@ def main():
         tasks[0].switch_window(i)
         tasks[0].run(f'sudo iperf3 -s -p {port}', non_blocking=True)
         tasks[1].switch_window(i)
-        tasks[1].run(f'sudo iperf3 -T {tag} -c {ip} -P {args.flows_per_proc} -i 1 -t {args.duration_sec} -V -p {port}',
-                     non_blocking=True)
-
+        tasks[1].run(f'sudo iperf3 -T {tag} -c {ip} -P {args.flows_per_proc} -i 1 -t {args.duration_sec} -V -p {port}', non_blocking=True)
 
 
 if __name__ == '__main__':
-    main()
+    if args.launch == "launcher":
+        launcher()
+    else:
+        worker()
