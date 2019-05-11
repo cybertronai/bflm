@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# python launch_network_test.py --instance_type=p3dn.24xlarge --multiproc --nospot
+# python launch_network_test.py --nospot
 #
 #
 
@@ -11,9 +11,9 @@ import util
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--name', type=str, default='nt')
-parser.add_argument('--instance_type', type=str, default="p3.16xlarge")
+parser.add_argument('--instance_type', type=str, default="p3dn.24xlarge")
 parser.add_argument('--machines', type=int, default=2)
-parser.add_argument('--image_name', type=str, default='reference00')
+parser.add_argument('--image_name', type=str, default='cybertronai00')
 parser.add_argument('--nospot', action='store_true',
                     help='use regular instead of spot instances')
 parser.add_argument('--multiproc', action='store_true')
@@ -24,11 +24,6 @@ args = parser.parse_args()
 
 
 def main():
-    ncluster.set_backend('aws')
-    ncluster.set_logdir_root('/ncluster/runs.network')
-    util.pdb_on_error()
-    
-    #    assert args.pattern in ['ring', 'all2all']
     if args.instance_type == 'p3.16xlarge':
         instance_short_name = 'p3'
     elif args.instance_type == 'p3dn.24xlarge':
@@ -38,8 +33,6 @@ def main():
     else:
         assert False, 'unsupported instance '+args.instance_type
 
-    # naming: nt-{p3/pdn}-{# machines}-{ring/all2all/etc}
-    #name = f"{args.name}-{instance_short_name}-{args.machines}-default"
     job = ncluster.make_job(name=args.name,
                             num_tasks=args.machines,
                             image_name=args.image_name,
