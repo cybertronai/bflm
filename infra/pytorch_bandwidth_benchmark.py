@@ -1,6 +1,18 @@
 #!/usr/bin/env python
 # python launch_network_test.py --instance_type=p3dn.24xlarge
 #
+# # 41 Gbps
+# # pytorch 1.0, nccl 2.3.7+cuda10.0
+# python pytorch_bandwidth_benchmark.py --nospot --conda_env=pytorch_p36 --role=launcher --name=nt --skip_setup
+#
+# # 10.7
+# # PyTorch 1.1.0a0+3803d1c with nccl 2.3.7
+# python pytorch_bandwidth_benchmark.py --nospot --conda_env=pytorch_april --role=launcher --name=nt --skip_setup
+#
+# # 12.8
+# #  PyTorch 1.1 with nccl 2.4.7ms0
+# python pytorch_bandwidth_benchmark.py --nospot --conda_env=pytorch_april_patched --role=launcher --name=nt --skip_setup
+
 # 16 Rings, 8 Processes, 151-153, 53 Gbps, received 20.9
 # 16 rings, 8 processes, 173-178, 46 Gbps, received 20.9
 # 171-177ms, 39.8 Gbps
@@ -40,12 +52,12 @@ parser.add_argument('--name', type=str, default='bandwidth_test')
 parser.add_argument('--seed', type=int, default=1)
 
 parser.add_argument("--aws", action="store_true", help="enable to run on AWS")
-parser.add_argument('--instance_type', type=str, default="p3.2xlarge")
+parser.add_argument('--instance_type', type=str, default="p3dn.24xlarge")
 parser.add_argument('--machines', type=int, default=2)
 parser.add_argument('--nproc_per_node', type=int, default=8)
 
 # pytorch 1.0.1/2.3.7+cuda10.0
-# parser.add_argument('--conda_env', type=str, default='pytorch_p36')
+parser.add_argument('--conda_env', type=str, default='pytorch_p36')
 
 # pytorch latest/2.3.7+cuda10.0
 # parser.add_argument('--conda_env', type=str, default='pytorch_april_nccl237')
@@ -99,11 +111,6 @@ def _get_nccl_params():
 
 
 def launcher():
-    if args.aws:
-        ncluster.set_backend('aws')
-
-    ncluster.set_logdir_root('/ncluster/runs.network')
-
     # todo: flag for skip setup
 
     job = ncluster.make_job(name=args.name,
@@ -135,12 +142,8 @@ def launcher():
     job.upload('util.py')
     worker_script_fn = os.path.basename(__file__)  # remote location
 
-    if args.use_latest_nccl:
-        conda_env = 'pytorch_april'
-    else:
-        conda_env = 'pytorch_p36'
         
-    job.run(f'killall -9 python || echo fail && source activate {conda_env}')
+    job.run(f'killall -9 python || echo fail && source activate {args.conda_env}')
 
     for i, task in enumerate(job.tasks):
         dist_params = dist_params0 + f'--node_rank={i} '
