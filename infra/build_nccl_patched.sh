@@ -11,6 +11,7 @@
 # $NCCL_ROOT_DIR  # used by PyTorch
 
 export NCCL_PATCH_BRANCH=dev/kwen/multi-socket
+export NCCL_SRC_PARENT=~/nccl_patch
 
 # NCCL links to /usr/local/cuda, make sure it's cuda-10.0
 sudo rm /usr/local/cuda
@@ -34,8 +35,9 @@ make pkg.debian.build
 sudo cp /home/ubuntu/nccl/build/lib/libnccl* /usr/local/cuda/lib
 
 # (unneeded? Not clear if that path is used)
-export NCCL_HOME=~/nccl_patch/nccl/build/lib
-export NCCL_ROOT_DIR=~/nccl_patch/nccl/build/lib
+export NCCL_HOME=$NCCL_SRC_PARENT/nccl/build/lib
+export NCCL_ROOT_DIR=$NCCL_SRC_PARENT/nccl/build/lib
+
 
 # testing
 cd ~
