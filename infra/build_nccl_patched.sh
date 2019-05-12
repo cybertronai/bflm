@@ -10,6 +10,7 @@
 # $NCCL_HOME      # used by make for nccl-examples
 # $NCCL_ROOT_DIR  # used by PyTorch
 
+export NCCL_PATCH_BRANCH=dev/kwen/multi-socket
 
 # NCCL links to /usr/local/cuda, make sure it's cuda-10.0
 sudo rm /usr/local/cuda
@@ -20,6 +21,8 @@ cd ~/nccl_patch
 git clone https://github.com/NVIDIA/nccl.git
 cd ~/nccl_patch/nccl
 git pull
+git checkout $NCCL_PATCH_BRANCH
+rm -Rf build
 make -j src.build
 sudo apt install -y build-essential devscripts debhelper
 make pkg.debian.build
