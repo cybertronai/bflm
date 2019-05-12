@@ -54,7 +54,7 @@ parser.add_argument('--nproc_per_node', type=int, default=8)
 # parser.add_argument('--conda_env', type=str, default='pytorch_april')
 
 
-parser.add_argument('--image_name', type=str, default='reference03')
+parser.add_argument('--image_name', type=str, default='cybertronai01')
 
 parser.add_argument('--method', type=str, default='optimize')
 
@@ -88,7 +88,7 @@ args = parser.parse_args()
 fp16 = True
 
 def _get_nccl_params():
-    #    params = f'NCCL_DEBUG=INFO '
+    params = f'NCCL_DEBUG=INFO '
     params = f'NCCL_DEBUG=VERSION '
     if args.machines > 1:
         params += f'NCCL_MIN_NRINGS={args.num_rings} NCCL_MAX_NRINGS={args.num_rings} '
