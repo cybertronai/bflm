@@ -24,8 +24,8 @@ make pkg.debian.build
 # todo(y): maybe these copies are not needed given env vars below
 # move to /usr/lib, this may be location where NCCL examples look for nccl
 # copy nccl 2.4.6, but the symlinks nccl and nccl.2 will point to nccl 2.3.7
-sudo cp /home/ubuntu/nccl/build/lib/libnccl* /usr/lib
-sudo cp /home/ubuntu/nccl/build/lib/libnccl* /usr/local/cuda/lib
+# sudo cp /home/ubuntu/nccl/build/lib/libnccl* /usr/lib
+# sudo cp /home/ubuntu/nccl/build/lib/libnccl* /usr/local/cuda/lib
 
 # (unneeded? Not clear if that path is used)
 export NCCL_HOME=~/nccl/build/lib
