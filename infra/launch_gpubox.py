@@ -9,14 +9,11 @@ import ncluster
 parser = argparse.ArgumentParser()
 parser.add_argument('--name', type=str, default='gpubox',
                     help="instance name")
-parser.add_argument('--image-name', type=str,
-                    default='cybertronai01',
-                    help="name of AMI to use ")
+parser.add_argument('--image-name', type=str, default='cybertronai01')
+parser.add_argument('--conda_env', type=str, default='pytorch_p36')
 parser.add_argument('--instance-type', type=str, default='p3.2xlarge',
                     help="type of instance")
-parser.add_argument('--password',
-                    default='DefaultNotebookPasswordPleaseChange',
-                    help='password to use for jupyter notebook')
+parser.add_argument('--password', default='DefaultNotebookPasswordPleaseChange', help='password to use for jupyter notebook')
 
 args = parser.parse_args()
 module_path = os.path.dirname(os.path.abspath(__file__))
@@ -41,7 +38,11 @@ def main():
   # upload notebook config with provided password
   jupyter_config_fn = _create_jupyter_config(args.password)
   remote_config_fn = '~/.jupyter/jupyter_notebook_config.py'
+  task.run(f'source activate {args.conda_env}')
   task.upload(jupyter_config_fn, remote_config_fn)
+
+  task.run('conda install -c conda-forge jupyter_nbextensions_configurator jupyter_contrib_nbextensions -y ')
+  task.run('jupyter nbextension enable toc2/main')
 
   # upload sample notebook and start Jupyter server
   task.run('mkdir -p /ncluster/notebooks')
