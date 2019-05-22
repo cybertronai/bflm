@@ -25,12 +25,20 @@
 #
 # After applying moses and "haven't" detokenizer
 # python eval_lambada_slow.py --detokenize --detokenize_havent
-#
 # 5000/ 5153, acc: 33.01
 # 5100/ 5153, acc: 33.09
 # Final accuracy
 # acc: 33.11
 #
+# After merging quotes
+# python eval_lambada_slow.py --detokenize --detokenize_havent --preprocess
+# 4700/ 5153, acc: 33.23
+# 4800/ 5153, acc: 33.35
+# 4900/ 5153, acc: 33.36
+# 5000/ 5153, acc: 33.57
+# 5100/ 5153, acc: 33.62
+# Final accuracy
+# acc: 33.63
 #
 # Does line-by-line prediction of several BPE tokens, and compares the last
 # word.
@@ -59,7 +67,7 @@ tokenizer = BasicTokenizer()
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--path', type=str, default='lambada_test_plain_text.txt',
+parser.add_argument('--path', type=str, default='/ncluster/data/lambada/lambada_test_plain_text.txt',
                     help='location of lambada dataset')
 parser.add_argument('--batch', type=int, default=4, help='batch size')
 parser.add_argument('--max-batches', type=int, default=0, help='batch size')
@@ -70,19 +78,27 @@ parser.add_argument('--print-every-n',  type=int, default=100, help='print resul
 parser.add_argument('--beam-width',  type=int, default=128, help='predict this many results before stopword filtering')
 parser.add_argument('--detokenize',  action='store_true', help='apply moses detokenizer to input')
 parser.add_argument('--detokenize_havent',  action='store_true', help="also try to merge have n't to haven't")
+parser.add_argument('--preprocess',  action='store_true', help="strip quotes")
 
 
 import sys
 from sacremoses import MosesTokenizer, MosesDetokenizer
 detokenizer = MosesDetokenizer(lang='en')
 
+args = parser.parse_args()
+
 def detokenize(line):
     toks = line.split()
     return detokenizer.detokenize(toks)
 
 
-args = parser.parse_args()
-
+# from https://github.com/openai/gpt-2/issues/131#issuecomment-492786058
+def preprocess(text):
+    text = text.replace("“", '"')
+    text = text.replace("”", '"')
+    text = text.replace("''", '"')
+    text = text.replace("``", '"')
+    return '\n'+text.strip()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using ", device)
@@ -155,7 +171,11 @@ def predict(line, max_predictions):
 
 
 def main():
-    lines = open(f'{args.path}').readlines()
+    ds_raw = open(f'{args.path}').read()
+    if args.preprocess:
+        ds_raw = preprocess(ds_raw)
+        
+    lines = ds_raw.strip().split('\n')
 
     predictions_file = open('/ncluster/data/lambada_predictions.txt', 'w')
     errors = 0
