@@ -5,6 +5,12 @@
 #
 # Example usage:
 #
+# python eval_lambada.py --batch=20 --path=/ncluster/data/lambada/lambada_test_plain_text.txt --ignore-fragments --preprocess
+# Accuracy: 0.3128
+#
+# python eval_lambada.py --batch=20 --path=/ncluster/data/lambada/lambada_test_plain_text.txt --ignore-fragments
+# Accuracy: 0.3093
+#
 # python eval_lambada.py --batch=20 --path=/ncluster/data/lambada/lambada_test_plain_text.txt
 # Accuracy: 0.61
 #
@@ -44,6 +50,7 @@ parser.add_argument('--path', type=str, default='lambada_test_plain_text.txt',
 parser.add_argument('--batch', type=int, default=4, help='batch size')
 parser.add_argument('--max-batches', type=int, default=0, help='batch size')
 parser.add_argument('--ignore-fragments',  action='store_true', help="Whether to run training.")
+parser.add_argument('--preprocess',  action='store_true', help="strip quotes")
 args = parser.parse_args()
 
 
@@ -59,6 +66,13 @@ model.to(device)
 def argmax(t):
     return int(torch.argmax(t).item())
 
+# from https://github.com/openai/gpt-2/issues/131#issuecomment-492786058
+def preprocess(text):
+    text = text.replace("“", '"')
+    text = text.replace("”", '"')
+    text = text.replace("''", '"')
+    text = text.replace("``", '"')
+    return '\n'+text.strip()
 
 def score_batch(batch):
     """Return number of last-word mismatches in a batch."""
@@ -105,7 +119,12 @@ def score_batch(batch):
 
 
 def main():
-    ds = open(f'{args.path}').readlines()
+    ds_raw = open(f'{args.path}').read()
+    if args.preprocess:
+        ds_raw = preprocess(ds_raw)
+        
+    ds = ds_raw.strip().split('\n')
+        
     data_loader = DataLoader(ds, batch_size=args.batch, shuffle=False)
     
     errors = 0
@@ -117,7 +136,7 @@ def main():
         if args.max_batches and i>=args.max_batches-1:
             break
 
-    print("Accuracy: %.2f"%(1-errors/total,))
+    print("Accuracy: %.4f"%(1-errors/total,))
         
 
 if __name__=='__main__':
