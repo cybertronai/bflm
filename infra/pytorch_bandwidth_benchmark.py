@@ -48,12 +48,11 @@ from ncluster import aws_util
 import util
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--name', type=str, default='bandwidth_test')
+parser.add_argument('--name', type=str, default='big_pair')
 parser.add_argument('--seed', type=int, default=1)
 
-parser.add_argument("--aws", action="store_true", help="enable to run on AWS")
 parser.add_argument('--instance_type', type=str, default="p3dn.24xlarge")
-parser.add_argument('--machines', type=int, default=2)
+parser.add_argument('--num_tasks', type=int, default=2)
 parser.add_argument('--nproc_per_node', type=int, default=8)
 
 # pytorch 1.0.1/2.3.7+cuda10.0
@@ -66,7 +65,8 @@ parser.add_argument('--conda_env', type=str, default='pytorch_p36')
 # parser.add_argument('--conda_env', type=str, default='pytorch_april')
 
 
-parser.add_argument('--image_name', type=str, default='cybertronai01')
+parser.add_argument('--image_name', type=str, default='Deep Learning AMI (Ubuntu) Version 23.0')
+# parser.add_argument('--image_name', type=str, default='cybertronai01')
 
 parser.add_argument('--method', type=str, default='optimize')
 
@@ -102,7 +102,7 @@ fp16 = True
 def _get_nccl_params():
     params = f'NCCL_DEBUG=INFO '
     params = f'NCCL_DEBUG=VERSION '
-    if args.machines > 1:
+    if args.num_tasks > 1:
         params += f'NCCL_MIN_NRINGS={args.num_rings} NCCL_MAX_NRINGS={args.num_rings} '
     if aws_util.instance_supports_100gbps_network(args.instance_type):
         params += f'NCCL_SOCKET_IFNAME=ens5 '
@@ -113,13 +113,7 @@ def _get_nccl_params():
 def launcher():
     # todo: flag for skip setup
 
-    job = ncluster.make_job(name=args.name,
-                            run_name=args.name,
-                            num_tasks=args.machines,
-                            image_name=args.image_name,
-                            instance_type=args.instance_type,
-                            spot=not args.nospot,
-                            skip_setup=args.skip_setup)
+    job = ncluster.make_job(**vars(args))
     print(f"Logging to {job.logdir}")
 
     nccl_params = _get_nccl_params()
@@ -133,11 +127,10 @@ def launcher():
     worker_params = ' '.join(worker_params)  # pass through all args
 
     dist_params0 = (f'--nproc_per_node={args.nproc_per_node} '
-                    f'--nnodes={args.machines} '
+                    f'--nnodes={args.num_tasks} '
                     f'--master_addr={job.tasks[0].ip} '
                     f'--master_port={6016} ')
 
-    #    worker_script_fn = os.path.abspath(__file__)  # local location
     job.upload(__file__)
     job.upload('util.py')
     worker_script_fn = os.path.basename(__file__)  # remote location
