@@ -79,6 +79,7 @@ parser.add_argument('--beam-width',  type=int, default=128, help='predict this m
 parser.add_argument('--detokenize',  action='store_true', help='apply moses detokenizer to input')
 parser.add_argument('--detokenize_havent',  action='store_true', help="also try to merge have n't to haven't")
 parser.add_argument('--preprocess',  action='store_true', help="strip quotes")
+parser.add_argument('--jeff_suggestion',  action='store_true', help="use jeff's suggestion of prepending \n to each example")
 
 
 import sys
@@ -188,6 +189,9 @@ def main():
         if args.detokenize_havent:
           line = line.replace(" n't", "n't")
 
+        if args.jeff_suggestion:
+            line = '\n'+line
+            
         context, last_word = remove_last_word(line)
 
         # because BPE tokens can span words, predict several BPE tokens

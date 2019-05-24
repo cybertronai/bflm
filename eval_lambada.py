@@ -15,7 +15,10 @@
 # Accuracy: 0.61
 #
 # python eval_lambada.py --batch=20 --path=/ncluster/data/lambada/lambada_test_plain_text.txt --ignore-fragments
-# Accuracy: 0.31
+# Accuracy: 0.3093
+
+# python eval_lambada.py --ignore-fragments --jeff_suggestion --ignore-fragments
+# Accuracy: 0.3171
 #
 # python eval_lambada.py --batch=20 --path=/ncluster/data/lambada/lambada_control_test_data_plain_text.txt
 # Accuracy: 0.35
@@ -45,12 +48,12 @@ enc = GPT2Tokenizer.from_pretrained(model_name)
 model = GPT2LMHeadModel.from_pretrained(model_name)
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--path', type=str, default='lambada_test_plain_text.txt',
-                    help='location of lambada dataset')
+parser.add_argument('--path', type=str, default='/ncluster/data/lambada/lambada_test_plain_text.txt', help='location of lambada dataset')
 parser.add_argument('--batch', type=int, default=4, help='batch size')
 parser.add_argument('--max-batches', type=int, default=0, help='batch size')
 parser.add_argument('--ignore-fragments',  action='store_true', help="Whether to run training.")
 parser.add_argument('--preprocess',  action='store_true', help="strip quotes")
+parser.add_argument('--jeff_suggestion',  action='store_true', help="use jeff's suggestion of prepending \n to each example")
 args = parser.parse_args()
 
 
@@ -81,6 +84,8 @@ def score_batch(batch):
     fragments = []
     for line in batch:
         line = line.strip()
+        if args.jeff_suggestion:
+            line = '\n'+line
         line_encoded = enc.encode(line)
         encoded_last_word = enc.decode(line_encoded[-1:]).strip()
         actual_last_word = line.split()[-1].strip()
