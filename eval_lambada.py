@@ -22,6 +22,15 @@
 #
 # python eval_lambada.py --batch=20 --path=/ncluster/data/lambada/lambada_control_test_data_plain_text.txt
 # Accuracy: 0.35
+#
+# Using jsonl file
+# python eval_lambada.py --path=lambada_test.jsonl
+# Accuracy: 0.4667
+#
+# Using jslon file + hacks
+# python eval_lambada.py --path=lambada_test.jsonl --preprocess --jeff_suggestion
+# Accuracy: 0.4689
+
 
 import argparse
 import logging
@@ -54,6 +63,7 @@ parser.add_argument('--max-batches', type=int, default=0, help='batch size')
 parser.add_argument('--ignore-fragments',  action='store_true', help="Whether to run training.")
 parser.add_argument('--preprocess',  action='store_true', help="strip quotes")
 parser.add_argument('--jeff_suggestion',  action='store_true', help="use jeff's suggestion of prepending \n to each example")
+parser.add_argument('--dryrun',  action='store_true', help="test preprocessing pipeline")
 args = parser.parse_args()
 
 
@@ -104,6 +114,9 @@ def score_batch(batch):
 
     batch_padded = torch.tensor(batch_padded)
     batch_padded = batch_padded.to(device)
+    if args.dryrun:
+        return 0, 1
+    
     logits, presents = model(batch_padded)
 
     errors = 0
@@ -129,7 +142,24 @@ def main():
         ds_raw = preprocess(ds_raw)
         
     ds = ds_raw.strip().split('\n')
-        
+
+    # special handling for jsonl file
+    lines = []
+    if args.path.endswith('.jsonl'):
+        # special handling for file from Jeff
+        for line in ds:
+            #            candidate1 = eval(line)['text']
+            #            lines.append(candidate1)
+            candidate2 = line[len('{"text": "'):-len('"}')]
+            candidate2 = f'''"""{candidate2}"""'''
+            lines.append(eval(candidate2))
+
+            #            lines.append(eval(line))
+            #print(line)
+            #            break
+            #            print(line)
+            #            eprint(lines[-1])
+        ds = lines
     data_loader = DataLoader(ds, batch_size=args.batch, shuffle=False)
     
     errors = 0
