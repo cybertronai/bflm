@@ -9,9 +9,9 @@ import ncluster
 parser = argparse.ArgumentParser()
 parser.add_argument('--name', type=str, default='gpubox',
                     help="instance name")
-parser.add_argument('--image-name', type=str, default='cybertronai01')
+parser.add_argument('--image_name', type=str, default='cybertronai01')
 parser.add_argument('--conda_env', type=str, default='pytorch_p36')
-parser.add_argument('--instance-type', type=str, default='p3.2xlarge',
+parser.add_argument('--instance_type', type=str, default='p3.2xlarge',
                     help="type of instance")
 parser.add_argument('--password', default='DefaultNotebookPasswordPleaseChange', help='password to use for jupyter notebook')
 
