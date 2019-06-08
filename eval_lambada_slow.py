@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-# Evaluate GPT-2 model on lambada dataset.
+# Evaluate GPT-2 model on lambada dataset. (To match OpenAI's reported 46% accuracy, use eval_lambada.py which does token-level accuracy
+# rather than word-level)
 #
 # python eval_lambada_slow.py --path=lambada_test.jsonl
 # 41.98
