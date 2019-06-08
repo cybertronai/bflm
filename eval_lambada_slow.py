@@ -45,13 +45,13 @@
 # acc: 33.63
 #
 #
+# After using OpenAI's version of dataset
+# python eval_lambada_slow.py --path=lambada_test.jsonl
+# 41.98
 # After applying extra pre-processing
 # python eval_lambada_slow.py --path=lambada_test.jsonl --jeff_suggestion --preprocess
 # acc: 41.98
 
-# After using OpenAI's version of dataset
-# python eval_lambada_slow.py --path=lambada_test.jsonl
-# 41.98
 
 # After increasing search history
 # python eval_lambada_slow.py --path=lambada_test.jsonl --jeff_suggestion --preprocess --compare='/ncluster/data/lambada/lambada_test_plain_text.txt'
