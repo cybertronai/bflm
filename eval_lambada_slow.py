@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 # Evaluate GPT-2 model on lambada dataset.
+#
+# python eval_lambada_slow.py --path=lambada_test.jsonl
+# 41.98
+#
 # Discussion on https://github.com/huggingface/pytorch-pretrained-BERT/issues/491
 #
 #
